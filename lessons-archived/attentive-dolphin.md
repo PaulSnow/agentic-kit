@@ -15,6 +15,8 @@ occurrences:
     ref: "METHODOLOGY completion — an effectiveness assay counted a test failure caused by dereferencing the copied skill symlinks, without first establishing that the unmodified disposable copy passed"
   - date: 2026-09-05
     ref: "METHODOLOGY independent review R1 — the comparative evaluation fixture accepted an unrelated import-time RuntimeError as a successful wrong-repair rejection because it required only a traceback"
+  - date: 2026-10-12
+    ref: "METHODOLOGY bounded testing adoption — generic failure text and an early failing batch were initially treated as evidence for later assertion outcomes; independent review exposed the projection gap, and assertion-specific observations replaced that interpretation while preserving the old receipts"
 ---
 
 An implementation proved its controls with six deliberate mutations. Every

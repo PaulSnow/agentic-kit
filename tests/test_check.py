@@ -124,6 +124,7 @@ case "$1" in
     printf '%s\n' "$log"
     ;;
   complete)
+    printf 'receipt %s\\n' "$*" >> "$CHECK_TEST_LOG"
     if [[ " $* " == *" --outcome passed "* ]]; then
       printf '%s\n' \
         'CHECK RECEIPT STORED candidate=fixture log=.kickoff/check-all/logs/fixture.log' \
@@ -191,7 +192,11 @@ def test_all_is_default_locked_ordered_and_cwd_independent(
     result = _run(root, environment, cwd=tmp_path)
 
     assert result.returncode == 0, result.stderr
-    calls = Path(environment["CHECK_TEST_LOG"]).read_text().splitlines()
+    calls = [
+        line
+        for line in Path(environment["CHECK_TEST_LOG"]).read_text().splitlines()
+        if not line.startswith("receipt ")
+    ]
     assert calls == [
         (
             f"uv cwd={root} args=run --project {root / 'project'} --locked "
@@ -233,7 +238,8 @@ def test_all_is_default_locked_ordered_and_cwd_independent(
         ),
         (
             f"uv cwd={root} args=run --project {root / 'project'} --locked "
-            f"--managed-python python -m pytest -q --junitxml {root}/.kickoff/test-timing/full.xml "
+            f"--managed-python python {root}/lib/agentic_starter/test_runner.py "
+            f"-m pytest -q --junitxml {root}/.kickoff/test-timing/full.xml "
             "-o junit_family=xunit1 project/tests tests"
         ),
         f"parity cwd={root}",
@@ -344,9 +350,16 @@ def test_governed_iteration_lanes_dispatch_selected_tests_without_receipt(
     result = _run(root, environment, *arguments)
 
     assert result.returncode == 0, result.stderr
-    calls = Path(environment["CHECK_TEST_LOG"]).read_text().splitlines()
+    calls = [
+        line
+        for line in Path(environment["CHECK_TEST_LOG"]).read_text().splitlines()
+        if not line.startswith("receipt ")
+    ]
     assert f"governance cwd={root} args=select {selection_arguments}" in calls
-    assert any("python -m pytest -q tests/test_check.py" in call for call in calls)
+    assert any(
+        f"python {root}/lib/agentic_starter/test_runner.py -m pytest -q tests/test_check.py" in call
+        for call in calls
+    )
     assert not any("check-receipt" in call for call in calls)
 
 
@@ -366,7 +379,11 @@ def test_authoritative_runtime_probe_failure_stops_before_gate_without_fallback(
     assert result.returncode == 43
     assert "dependency-chain probe failed" in result.stderr
     assert "no runtime fallback was attempted" in result.stderr
-    calls = Path(environment["CHECK_TEST_LOG"]).read_text().splitlines()
+    calls = [
+        line
+        for line in Path(environment["CHECK_TEST_LOG"]).read_text().splitlines()
+        if not line.startswith("receipt ")
+    ]
     assert calls == [
         f"uv cwd={root} args=python find --no-project {runtime}",
         f"uv cwd={root} args=python dir",
@@ -375,3 +392,26 @@ def test_authoritative_runtime_probe_failure_stops_before_gate_without_fallback(
             f"--python {runtime} --no-managed-python python -c {PROBE}"
         ),
     ]
+
+
+def test_interrupted_tests_cannot_issue_a_passing_gate_receipt(
+    check_repo: tuple[Path, dict[str, str]],
+) -> None:
+    root, environment = check_repo
+    environment["CHECK_TEST_FAIL_MATCH"] = "-m pytest"
+    environment["CHECK_TEST_FAIL_CODE"] = "124"
+    result = _run(root, environment, "all")
+    assert result.returncode == 124, "incomplete gate status must survive"
+    assert "CHECK test INCOMPLETE" in result.stdout, "gate must label incomplete tests"
+    assert "CHECK test FAIL" not in result.stdout, (
+        "incomplete must not be labelled correctness failure"
+    )
+    assert "CHECK ALL PASS" not in result.stdout, "incomplete gate must not claim success"
+    receipt_calls = [
+        line
+        for line in Path(environment["CHECK_TEST_LOG"]).read_text().splitlines()
+        if line.startswith("receipt ")
+    ]
+    assert any("--exit-code 124 --outcome failed" in line for line in receipt_calls), (
+        "durable metadata must encode incomplete status"
+    )

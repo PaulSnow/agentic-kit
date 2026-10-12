@@ -50,8 +50,9 @@ python_toolchain_probe
 full_suite=(-q --junitxml "$repo_root/.kickoff/test-timing/full.xml" -o junit_family=xunit1
   project/tests tests)
 if [[ $# -eq 0 ]]; then
+  rm -f "$repo_root/.kickoff/test-timing/full.xml"
   exec uv run --project "$project_root" --locked "${python_toolchain_uv_args[@]}" \
-    python -m pytest "${full_suite[@]}"
+    python "$repo_root/lib/agentic_starter/test_runner.py" -m pytest "${full_suite[@]}"
 fi
 
 run_governed_lane() {
@@ -73,8 +74,9 @@ run_governed_lane() {
   selection_reason="${selection[1]}"
   echo "TEST GOVERNED $selection_mode: $selection_reason"
   if [[ "$selection_mode" == "FULL" ]]; then
+    rm -f "$repo_root/.kickoff/test-timing/full.xml"
     exec uv run --project "$project_root" --locked "${python_toolchain_uv_args[@]}" \
-      python -m pytest "${full_suite[@]}"
+      python "$repo_root/lib/agentic_starter/test_runner.py" -m pytest "${full_suite[@]}"
   fi
   if [[ "$selection_mode" != "FOCUSED" || ${#selection[@]} -lt 3 ]]; then
     echo "TEST ERROR governance selection did not provide runnable selectors" >&2
@@ -82,7 +84,7 @@ run_governed_lane() {
   fi
   selectors=("${selection[@]:2}")
   exec uv run --project "$project_root" --locked "${python_toolchain_uv_args[@]}" \
-    python -m pytest -q "${selectors[@]}"
+    python "$repo_root/lib/agentic_starter/test_runner.py" -m pytest -q "${selectors[@]}"
 }
 
 if [[ $# -eq 1 && "$1" == "--vital" ]]; then
@@ -94,4 +96,4 @@ if [[ $# -ge 1 && "$1" == "--changed-from" ]]; then
 fi
 
 exec uv run --project "$project_root" --locked "${python_toolchain_uv_args[@]}" \
-  python -m pytest "$@"
+  python "$repo_root/lib/agentic_starter/test_runner.py" -m pytest "$@"

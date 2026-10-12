@@ -33,6 +33,8 @@ Translate the arguments into one `./bin/mutate` command.
 | one or more paths or patterns | add `--path <pattern>` for each, to either form |
 | `budget <seconds>` | add `--budget-seconds <seconds>` |
 
+Only a specific operator request authorizes a survey, including an explicitly approved plan that names it. It may cover any committed or new subset and any requested duration; the default scope and budget are not authority ceilings. Never rerun a survey solely because test strengthening was approved.
+
 The default is the changed code: every line that differs from the upstream branch, committed or not, plus new files. With no upstream branch, use `HEAD` and say that only uncommitted work is covered. A path alone means that path's changed lines; `all` with a path means the whole of that path.
 
 ## Before running
@@ -60,6 +62,6 @@ Do not change tests or code unless the operator asks. When they do:
 
 - Kill a real gap by strengthening the proof that should have caught it, then record a red-witness receipt for that proof with `./bin/test-governance witness`.
 - Leave an equivalent fault alone and say why it is equivalent.
-- Rerun the survey over the same scope and report the new counts.
+- Rerun the survey only when the operator request includes that rerun, then report the new counts.
 
-When an approved phase names a survey as one of its checks, the phase runs `./bin/mutate` directly and dispositions each survivor on a changed line in its implementation report. That is the plan's decision, not this skill's.
+When an approved phase names a survey as one of its checks, the phase runs `./bin/mutate` directly and dispositions each survivor in the specifically requested scope in its implementation report. That specific plan approval supplies the request; generic phase approval does not.

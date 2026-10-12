@@ -50,15 +50,7 @@ Run the mechanical checks first — they are deterministic and their output anch
    no pin linking outside `docs/`), and the lifecycle-aware phase-ledger state machine.
 2. `./bin/lessons validate` — ledger schema health.
 3. `./bin/lessons candidates` — graduation-ready lessons (≥3 occurrences).
-4. `./bin/test-governance reassess` when the proof-estate bundle exists —
-   frozen baseline, complete dispositions and admissions, direct
-   critical risks, witness receipts, sizes, and the time-budget declaration. Run
-   `./bin/test-governance timing --samples 3` on the reference machine. Report the
-   `unwitnessed_baseline` count it prints. Do not run the mutation survey; put a
-   whole-estate survey in the decision queue with its expected cost, and run it only if the
-   operator chooses it, then append its dated counts and state to the repository's
-   test-governance history report and queue survivors in code that guards a critical risk. Carry
-   every dominated-proof finding into the decision queue. Then make the junk-pattern read and layer pass that `policies/test-suite-governance.md` § Reassessment and transfer requires; each proposed retirement is decided individually, and each ratified batch passes that policy's preservation review before it is applied.
+4. `./bin/test-governance reassess` when the bundle exists: validate local inventory, dispositions/admissions, direct risks, witness references and explicit pending baseline review. Read existing diagnostic timing with `./bin/test-governance timing`; no automatic resampling. Choose a bounded batch only for a concrete changed behavior, defect, cost or overlap signal. Report pending groups and their age from adoption/history records. No full-estate audit or forced shrinkage applies. Each proposed retirement goes into the decision queue and each ratified batch receives independent preservation review. Mutation tools require a specific operator request over any requested new or committed subset and duration; propose a survey with its expected cost only when the evidence warrants it, and record its dated outcome if requested.
 
 Then the judgment audits, each producing candidate findings:
 

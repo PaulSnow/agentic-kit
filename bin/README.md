@@ -113,21 +113,13 @@ lockfile. Behavioral coverage lives in
 `tests/test_toolchain_entrypoints.py`, `tests/test_check.py`, and
 `tests/test_check_receipt.py`.
 
-### `test-governance` — proof-estate reset, red witnesses, and safe selection
+### `test-governance` — test value, authoring witnesses, and safe selection
 
-Inventories collapsed families, expanded leaves, gate members, and hook
-commands. It validates the frozen reset, complete disposition/admission ledger,
-per-family sizes, the time-budget declaration, witness receipts, and direct
-critical risks; judges
-recorded test times (`timing`, with `--samples 3` to confirm a budget overrun);
-observes a red witness and records its receipt (`witness`); selects
-vital/changed lanes; and reports or
-reassesses the estate. It runs through the
-repository-selected environment.
+Inventories families, expanded leaves, gates and hooks; validates preserved baseline/ledger replay, explicit pending review, witness references and direct risks; reports diagnostic runtime without thresholds or automatic reruns; records authoring observations; and selects vital/changed feedback. `lib/agentic_starter/test_runner.py` supplies the Python profile's separately qualified process-group hang supervision. Timeout/interruption is incomplete evidence, never a pass or a red witness. Runtime startup remains outside this guard. The supervisor puts tests in their own session and forwards TERM, INT and HUP; killing the supervisor with SIGKILL can orphan that group. Enclosing tools must allow cleanup or track both owned groups. Deliberately detached descendants need separate cleanup.
 
 `witness begin` runs the named command and requires it to pass, then journals the
 named files. Plant the defect in those files, and `witness finish` requires the
-same command to fail with the `--expect` text, restores and verifies the original
+same command to fail with the `--expect` text and the declared `--failure-exit` (default 1; completed failure codes 1–123), restores and verifies the original
 bytes, and appends the receipt. `witness abort` restores an interrupted run.
 `validate` refuses while a witness is pending.
 
@@ -150,7 +142,7 @@ Behavioral coverage lives in `tests/test_test_governance.py` and
 
 Post-reset evolution is replayed from the append-only audit ledger. A
 `proof_admission` adds one proof with its evidence and needs a witness receipt, a
-`proof_repair` records a corrected assertion, and a `proof_retirement` removes one
+`proof_repair` records a historical correction, a `proof_modification` links numbered witness receipts (semantic freshness requires review) for a changed test, and a `proof_retirement` removes one
 currently active proof. There is no count budget.
 
 ### `mutate` — mutation survey of the proofs

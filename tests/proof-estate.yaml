@@ -1,15 +1,10 @@
-schema: agentic.proof_estate.v4
+schema: agentic.proof_estate.v5
 baseline_report: reports/test-governance/starter-pre-reset-baseline.json
 audit_ledger: reports/test-governance/starter-reset.jsonl
 witness_ledger: reports/test-governance/starter-witnesses.jsonl
-size_ceilings_seconds:
-  small: 2
-  medium: 20
-  large: 200
-time_budget:
-  test_lane_seconds: 100
-  tolerance: 0.25
-  reference_machine: a8a904a62251c08b
+adoption:
+  mode: complete
+hang_timeout_seconds: 1800
 mutation:
   tool: cosmic-ray
   paths:
@@ -67,7 +62,6 @@ families:
   admission: Product behavior remains in the authoritative suite.
   nearest_overlap: The whole-estate reset retained the cheapest direct oracle in this local family.
   tier: changed
-  size: small
   flake_rate: 0.0
   replacement_lineage: []
 - id: network-hermeticity
@@ -84,7 +78,6 @@ families:
   admission: Hermeticity is checked with the complete example suite.
   nearest_overlap: The whole-estate reset retained the cheapest direct oracle in this local family.
   tier: changed
-  size: small
   flake_rate: 0.0
   replacement_lineage: []
 - id: atomic-check
@@ -103,7 +96,6 @@ families:
   admission: This is the direct proof for the authoritative gate and iteration lanes.
   nearest_overlap: Toolchain entrypoint tests cover runtime choice but not gate composition.
   tier: vital
-  size: small
   flake_rate: 0.0
   replacement_lineage: []
 - id: catalog-integrity
@@ -125,7 +117,6 @@ families:
   admission: Broad catalog changes use the authoritative suite.
   nearest_overlap: The whole-estate reset retained the cheapest direct oracle in this local family.
   tier: changed
-  size: medium
   flake_rate: 0.0
   replacement_lineage: []
 - id: hook-liveness
@@ -143,7 +134,6 @@ families:
   admission: Hook custody is verified in the complete policy gate.
   nearest_overlap: The whole-estate reset retained the cheapest direct oracle in this local family.
   tier: changed
-  size: small
   flake_rate: 0.0
   replacement_lineage: []
 - id: plan-concreteness
@@ -161,7 +151,6 @@ families:
   admission: Planning mechanics remain full-suite evidence.
   nearest_overlap: The whole-estate reset retained the cheapest direct oracle in this local family.
   tier: changed
-  size: small
   flake_rate: 0.0
   replacement_lineage: []
 - id: plan-delivery
@@ -179,7 +168,6 @@ families:
   admission: Delivery completeness is checked at its explicit gate.
   nearest_overlap: The whole-estate reset retained the cheapest direct oracle in this local family.
   tier: changed
-  size: small
   flake_rate: 0.0
   replacement_lineage: []
 - id: full-gate-receipt
@@ -198,7 +186,6 @@ families:
   admission: Receipt identity is the sole proof consumed by pre-push.
   nearest_overlap: Atomic-check proves gate execution but not durable reuse custody.
   tier: vital
-  size: small
   flake_rate: 0.0
   replacement_lineage: []
 - id: execution-dashboard
@@ -217,7 +204,6 @@ families:
   admission: Reporting changes retain their full fixture matrix.
   nearest_overlap: The whole-estate reset retained the cheapest direct oracle in this local family.
   tier: changed
-  size: small
   flake_rate: 0.0
   replacement_lineage: []
 - id: execution-telemetry
@@ -235,7 +221,6 @@ families:
   admission: Concurrency and recovery proofs remain a complete family.
   nearest_overlap: The whole-estate reset retained the cheapest direct oracle in this local family.
   tier: changed
-  size: medium
   flake_rate: 0.0
   replacement_lineage: []
 - id: hook-installation
@@ -253,7 +238,6 @@ families:
   admission: Installation behavior runs with the complete hook proofs.
   nearest_overlap: The whole-estate reset retained the cheapest direct oracle in this local family.
   tier: changed
-  size: small
   flake_rate: 0.0
   replacement_lineage: []
 - id: kickoff-configuration
@@ -273,7 +257,6 @@ families:
   admission: Configuration interactions retain the full matrix.
   nearest_overlap: The whole-estate reset retained the cheapest direct oracle in this local family.
   tier: changed
-  size: medium
   flake_rate: 0.0
   replacement_lineage: []
 - id: orchestration-evidence
@@ -299,7 +282,6 @@ families:
   admission: The evidence graph is validated as a complete family. It is large because its proofs drive whole synthetic phases through the real evidence tool; one thorough lifecycle carries the general checks and three scenario proofs (primary mode, child marker transitions, a nested parent chain) carry only what distinguishes them.
   nearest_overlap: The whole-estate reset retained the cheapest direct oracle in this local family.
   tier: changed
-  size: large
   flake_rate: 0.0
   replacement_lineage: []
 - id: kickoff-control-plane
@@ -318,7 +300,6 @@ families:
   admission: A post-reset retirement funds this direct executable oracle for the new control plane.
   nearest_overlap: Orchestration-evidence tests bind review artifacts, but did not own executable command authority.
   tier: changed
-  size: small
   flake_rate: 0.0
   replacement_lineage:
   - pytest:tests/test_kickoff_tree_id.py::test_tracked_staged_unstaged_and_untracked_changes_affect_identity
@@ -342,7 +323,6 @@ families:
   admission: A post-reset retirement funds this direct executable oracle for append-only construction evidence.
   nearest_overlap: Log policy prose described ownership but did not prove exact bytes or repair boundaries.
   tier: changed
-  size: small
   flake_rate: 0.0
   replacement_lineage:
   - pytest:tests/test_kickoff_tree_id.py::test_symlink_escape_fails_closed
@@ -363,7 +343,6 @@ families:
   admission: Identity mode coverage remains intact in full.
   nearest_overlap: The whole-estate reset retained the cheapest direct oracle in this local family.
   tier: changed
-  size: medium
   flake_rate: 0.0
   replacement_lineage: []
 - id: lessons-ledger
@@ -383,7 +362,6 @@ families:
   admission: Ledger governance remains in the complete suite.
   nearest_overlap: The whole-estate reset retained the cheapest direct oracle in this local family.
   tier: changed
-  size: small
   flake_rate: 0.0
   replacement_lineage: []
 - id: methodology-transfer
@@ -407,7 +385,6 @@ families:
   admission: Transfer completeness is assessed across all authorities.
   nearest_overlap: The whole-estate reset retained the cheapest direct oracle in this local family.
   tier: changed
-  size: small
   flake_rate: 0.0
   replacement_lineage: []
 - id: harness-parity
@@ -429,7 +406,6 @@ families:
   admission: Parity is enforced by its dedicated policy gate.
   nearest_overlap: The whole-estate reset retained the cheapest direct oracle in this local family.
   tier: changed
-  size: small
   flake_rate: 0.0
   replacement_lineage: []
 - id: ledger-slugs
@@ -450,7 +426,6 @@ families:
   admission: Slug generation is already a small focused family.
   nearest_overlap: The whole-estate reset retained the cheapest direct oracle in this local family.
   tier: changed
-  size: small
   flake_rate: 0.0
   replacement_lineage: []
 - id: phase-renumbering
@@ -467,7 +442,6 @@ families:
   admission: Renumbering rewrites identifiers across files; a missed reference silently repoints a dependency.
   nearest_overlap: The catalog checker validates the ledger a renumbering produces but performs no renumbering.
   tier: changed
-  size: small
   flake_rate: 0.0
   replacement_lineage: []
 - id: pre-commit-contract
@@ -485,7 +459,6 @@ families:
   admission: The hook proof runs with the complete hook family.
   nearest_overlap: The whole-estate reset retained the cheapest direct oracle in this local family.
   tier: changed
-  size: small
   flake_rate: 0.0
   replacement_lineage: []
 - id: research-authority
@@ -506,7 +479,6 @@ families:
   admission: Research authority uses its complete cross-surface matrix.
   nearest_overlap: The whole-estate reset retained the cheapest direct oracle in this local family.
   tier: changed
-  size: small
   flake_rate: 0.0
   replacement_lineage: []
 - id: review-verdict-harvest
@@ -525,7 +497,6 @@ families:
   admission: Harvest logic retains its cross-harness fixture set.
   nearest_overlap: The whole-estate reset retained the cheapest direct oracle in this local family.
   tier: changed
-  size: small
   flake_rate: 0.0
   replacement_lineage: []
 - id: shell-syntax
@@ -546,7 +517,6 @@ families:
   admission: Shell syntax also runs as a direct policy check.
   nearest_overlap: The whole-estate reset retained the cheapest direct oracle in this local family.
   tier: changed
-  size: small
   flake_rate: 0.0
   replacement_lineage: []
 - id: test-governance-manager
@@ -555,6 +525,7 @@ families:
   - tests/test_test_governance.py
   source_paths: &id023
   - lib/agentic_starter/test_governance.py
+  - lib/agentic_starter/test_runner.py
   - bin/test-governance
   - tests/proof-estate.yaml
   - tests/test_test_governance.py
@@ -568,7 +539,6 @@ families:
   admission: This family is the direct fail-closed witness for every governed selection.
   nearest_overlap: Atomic-check dispatches lanes but does not validate their proof ownership.
   tier: vital
-  size: medium
   flake_rate: 0.0
   replacement_lineage: []
 - id: mutation-survey
@@ -586,7 +556,6 @@ families:
   admission: The survey is the only measure of which planted faults the estate misses; its three states and its failure need direct proof.
   nearest_overlap: The governance manager validates the declaration's shape but never runs a survey.
   tier: changed
-  size: medium
   flake_rate: 0.0
   replacement_lineage: []
 - id: toolchain-caller-policy
@@ -608,7 +577,6 @@ families:
   admission: Caller policy also runs as a direct policy gate.
   nearest_overlap: The whole-estate reset retained the cheapest direct oracle in this local family.
   tier: changed
-  size: small
   flake_rate: 0.0
   replacement_lineage: []
 - id: toolchain-entrypoints
@@ -631,7 +599,6 @@ families:
   admission: This family proves the runtime contract behaviorally from every supported invocation.
   nearest_overlap: Toolchain-caller policy scans text but does not execute the entrypoints.
   tier: vital
-  size: small
   flake_rate: 0.0
   replacement_lineage: []
 - id: treatise-governance
@@ -650,7 +617,6 @@ families:
   admission: Publication governance remains in its complete family.
   nearest_overlap: The whole-estate reset retained the cheapest direct oracle in this local family.
   tier: changed
-  size: small
   flake_rate: 0.0
   replacement_lineage: []
 - id: gate-changed
@@ -870,10 +836,10 @@ families:
   - bin/check
   covers:
   - bin/check
-  contract: The full gate judges the recorded test times against size ceilings and the test-lane budget.
+  contract: The full gate produces the diagnostic timing report and refuses invalid runtime configuration.
   risk_class: lifecycle-custody
-  oracle: The named gate command remains present and fails the lifecycle step on a size breach or a confirmed overrun.
-  admission: Retained as direct lifecycle wiring for the time budget rather than a substitute for its behavioral proof.
+  oracle: The named gate command remains present; slow completed tests are diagnostic and missing timing is explicitly unmeasured.
+  admission: Retained as direct lifecycle wiring for runtime reporting, separate from correctness and hang supervision.
   nearest_overlap: The timing behavioral proof exercises the judgment; this proof uniquely proves the gate runs it.
   tier: full
   flake_rate: 0.0

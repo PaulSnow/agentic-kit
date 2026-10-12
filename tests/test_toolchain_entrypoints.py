@@ -129,7 +129,8 @@ def test_test_defaults_to_every_repository_test_from_any_cwd(
         ),
         (
             f"uv cwd={root} args=run --project {root / 'project'} --locked "
-            f"--managed-python python -m pytest -q --junitxml {root}/.kickoff/test-timing/full.xml "
+            f"--managed-python python {root}/lib/agentic_starter/test_runner.py "
+            f"-m pytest -q --junitxml {root}/.kickoff/test-timing/full.xml "
             "-o junit_family=xunit1 project/tests tests"
         ),
     ]
@@ -187,7 +188,8 @@ def test_test_governed_lanes_run_selected_proofs(
         ),
         (
             f"uv cwd={root} args=run --project {root / 'project'} --locked "
-            "--managed-python python -m pytest -q tests/test_check.py"
+            f"--managed-python python {root}/lib/agentic_starter/test_runner.py "
+            "-m pytest -q tests/test_check.py"
         ),
     ]
 

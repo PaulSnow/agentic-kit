@@ -2733,3 +2733,76 @@ The wording that invited paths is aligned: step 5 of the reading protocol in `pl
 **Remaining for the operator.** The choice of one form over accepting both was made as a default and can be overturned. A derived project whose plan writes paths fails the checker when taught, until each value is rewritten as an id; the refusal names each one, and no tool converts them. The full test run took 112 seconds, three more than at the last record.
 
 Lessons: one occurrence appended to the archived `russet-mole`, a check that reported success while proving less than its name claimed. No new lesson.
+
+## 2026-10-12 14:28 — METHODOLOGY SCOPE
+
+Authorized outcome: replace ordinary wall-clock pass/fail limits with semantic marginal-value review, bounded attempted work, diagnostic runtime reporting and independently qualified hang deadlines. Preserve explicit product-performance requirements. Require recorded observed-red evidence only when tests are created or modified; mutation tools may survey any requested subset or duration only on explicit operator request. Adopt on new/modified tests and review existing suites in bounded, justified batches, preserving completed reset records and recoverable history.
+
+Ownership: the operator explicitly granted this primary sole write ownership after the former owner was found idle and unreachable. The handoff is recorded on the coordination bus for that owner. No concurrent writer is authorized for this scope.
+
+Surfaces: test-governance policy and design brief; authoring/review/sweep/transfer callers; deterministic governance, diagnostic timing, bounded adoption and witness integration; test runner hang protection and incomplete-result classification; focused behavioral proofs, manifests, catalogs and attributable ledger additions required by these changes.
+
+Exclusions: no automatic whole-estate test rewrite, no automatic mutation-tool invocation, no other-project changes, no alteration of completed reset evidence, no rollout to recipients. The specifically requested independent read-only review is an explicit exception to the ordinary primary-only methodology route; no delegated production or fabricated phase acceptance.
+
+## 2026-10-12 15:36 — METHODOLOGY
+
+Bounded testing methodology adoption
+
+Approved scope and ownership: implemented the operator-approved outcome from the preceding METHODOLOGY SCOPE under sole-writer handoff. Scope stayed within this template. Completed reset, frozen baseline and prior evidence bytes are preserved. No other repository was changed, no whole-estate rewrite ran, and no mutation-testing tool was invoked.
+
+Behavior: ordinary runtime is diagnostic; semantic marginal value and transitive attempted work govern admission, with no count, assertion, coverage or mutation-score quota. Observed-red evidence applies to created/modified assertions only. Bounded baseline batches remain executable and can progress chronologically to complete adoption. Explicitly requested mutation surveys may cover any new/committed subset and duration. Hang and interrupted work are incomplete, never a correctness pass or red witness; outstanding groups conservatively keep completion unproved. Nested supervisors receive distinct cleanup grace.
+
+Files changed:
+- `.claude/agents/code-critic.md`
+- `.claude/agents/phase-coder.md`
+- `.claude/skills/kickoff/acceptance.md`
+- `.claude/skills/learn/SKILL.md`
+- `.claude/skills/mutate/SKILL.md`
+- `.claude/skills/stamp/SKILL.md`
+- `.claude/skills/sweep/SKILL.md`
+- `.claude/skills/teach/SKILL.md`
+- `LOG.md`
+- `bin/README.md`
+- `bin/check`
+- `bin/test`
+- `briefs/agentic-bootstrap.md`
+- `briefs/methodology.md`
+- `briefs/test-suite-value-governance.md`
+- `lessons-archived/attentive-dolphin.md`
+- `lib/agentic_starter/test_governance.py`
+- `lib/agentic_starter/test_runner.py`
+- `policies/build-gates.md`
+- `policies/test-suite-governance.md`
+- `policies/verification-discipline.md`
+- `reports/test-governance/README.md`
+- `reports/test-governance/starter-reset.jsonl`
+- `reports/test-governance/starter-witnesses.jsonl`
+- `tests/proof-estate.yaml`
+- `tests/test_check.py`
+- `tests/test_test_governance.py`
+- `tests/test_toolchain_entrypoints.py`
+
+Primary self-check: reviewed the complete diff against approved scope; searched active callers for removed timing/sampling rules; checked actual wrapper and manager boundaries, source restoration, ledger replay and append-only preservation. Independent review is an explicit operator-requested exception to the ordinary one-shot methodology route. Two isolated canonical read-only Claude Opus high passes completed. Both returned REVISE opinions; the second verified the first eleven resolutions and named five local follow-ups, which the primary corrected and qualified directly. No third pass or independent approval of those final corrections is claimed. The initial primary-mode launch refused before child execution because it required product evidence; the standalone canonical critic contract was then used without fabricating a product phase.
+
+Implementation candidate before close: `8f1273d4bd519ca416cb6e76c24e875d598497007234ec4deb790c1b528d651f`.
+
+Build status:
+- Final changed-path command and result: `./bin/test --changed-from '@{upstream}'` widened to the full suite because `bin/check` mapped ambiguously; 144 passed in 140.17 seconds, exit 0, no warnings in the complete output.
+- Lint, format, lesson validation and anonymization: passed; no warnings in their complete diagnostics.
+- Authoring checks: assertion-specific observed failures, restoration and green reruns recorded in the append-only witness ledger; incomplete results cannot certify red. Specific late-batch, partial-timing, remaining-child, manager-exit and nested-cleanup faults were observed. Fixture readiness was qualified separately.
+- Handoff gate: runs after this tracked close block; completion is contingent on the ignored receipt from the final bare `./bin/check all`.
+
+Acceptance:
+- Objective: primary accepts the approved bounded-testing behavior subject to the final handoff gate; no product phase or manual product acceptance is implied.
+- Parked for the user: none. Adoption in other repositories remains separately scoped work, not implied delivery.
+
+Delivery:
+- Default: commit and fast-forward push after the handoff gate, explicit attributable paths only.
+
+Lessons:
+- `attentive-dolphin` recurred: a generic failure and an early failed batch do not demonstrate later assertions; specific counterexamples now bind each claim, while earlier receipts remain history. No rule graduation.
+- Existing verification guidance also covered path discovery and formatter boundary mistakes; corrected locally without adding duplicate rules.
+
+Remaining:
+- Runtime startup before Python, deliberately detached groups and SIGKILL of the supervisor remain outside the guard. A permission refusal or unreaped group may conservatively report incomplete; the policy names this limitation.
+- Semantic marginal value, domination and evidence freshness remain judgment, not properties proven by receipt shape. Historical untouched tests are not retroactively challenged.

@@ -85,7 +85,11 @@ run_gate() {
     echo "CHECK $gate_name PASS"
   else
     local command_exit=$?
-    echo "CHECK $gate_name FAIL (exit $command_exit)" >&2
+    if [[ "$command_exit" -eq 124 || "$command_exit" -ge 128 ]]; then
+      echo "CHECK $gate_name INCOMPLETE (exit $command_exit; correctness unknown)" >&2
+    else
+      echo "CHECK $gate_name FAIL (exit $command_exit)" >&2
+    fi
     return "$command_exit"
   fi
 }

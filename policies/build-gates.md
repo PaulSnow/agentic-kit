@@ -92,7 +92,7 @@ full gate and preserves the test runner's exit status.
 When the repository carries the universal proof-estate bundle,
 `--vital` selects every locally admitted vital family and
 `--changed-from <ref>` selects the union of every family mapped to the live
-candidate's changed paths. A Markdown document no family covers selects the families of the test, library and executable files that name it, or only the vital families when nothing names it; a document several families cover selects all of them. Changed code that maps to one family also selects the families of the test, library and executable files that name it, including a Python module imported by its dotted name, so a shared helper's users are tested at commit rather than only at push. Both selections are produced by the deterministic manager. Invalid governance, an unsupported runner, an unresolved ref, or any unmapped or ambiguously covered code path widens to the full retained suite. Every full run records per-test times for the manager. The manager also enforces the frozen reset, witness receipts, direct-risk proofs, per-test size ceilings, the test-lane time budget, and periodic reassessment. The manifest's family
+candidate's changed paths. A Markdown document no family covers selects the families of the test, library and executable files that name it, or only the vital families when nothing names it; a document several families cover selects all of them. Changed code that maps to one family also selects the families of the test, library and executable files that name it, including a Python module imported by its dotted name, so a shared helper's users are tested at commit rather than only at push. Both selections are produced by the deterministic manager. Invalid governance, an unsupported runner, an unresolved ref, or any unmapped or ambiguously covered code path widens to the full retained suite. Every full run records per-test times for the manager. The manager validates preserved baseline/ledger replay, bounded-adoption state, witness references and direct-risk proofs, and reports diagnostic runtime. Ordinary elapsed time never determines correctness. The test subprocess has a separate generous hang deadline; timeout or interruption is INCOMPLETE, not a correctness pass or failure. See test-suite-governance.md for its qualified boundary. The manifest's family
 choices, mappings, risk labels, timings, and witness receipts are local
 state; they are never inherited from another repository.
 
@@ -128,7 +128,7 @@ Every `all` run starts durable, gitignored run metadata and captures its complet
 output under `.kickoff/check-all/`. Success writes a receipt bound to the exact
 `bin/kickoff-tree-id` candidate, an environment fingerprint, and the log digest;
 running, failed, identity-error, and candidate-drift runs retain terminal
-metadata but never create a reusable receipt. A log/storage failure remains an
+metadata but never create a reusable receipt. In this receipt format, `status: failed` with `exit_code: 124` (or a shell signal status of 128 or greater) encodes an incomplete invocation, not a completed correctness failure; consumers must inspect both fields. A log/storage failure remains an
 explicit failure and never creates a receipt. `CHECK ALL PASS` is emitted only
 after the log, receipt, and terminal run metadata are durable.
 

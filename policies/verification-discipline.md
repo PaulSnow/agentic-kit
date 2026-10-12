@@ -184,8 +184,7 @@ artifact another proof consumes.
 
 When a repository carries a proof-estate manifest, use its deterministic
 inventory to account for every collapsed family, expanded executable leaf, and
-gate/hook proof. Initial adoption freezes that denominator and performs the
-reviewed local deletion/consolidation rather than deferring it. Trace
+gate/hook proof. Initial adoption freezes that inventory and preserves completed resets. New and modified tests follow current admission and authoring requirements; existing suites are reviewed in bounded batches for a concrete reason, with pending judgments explicit. Trace
 test-to-test dependencies and producer-to-consumer proof flow. A replacement
 must retain the contract, oracle, red witness, downstream artifacts, and
 direct critical-risk proof. Hidden or deselected code

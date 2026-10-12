@@ -149,8 +149,6 @@ def _write_estate(root: Path, *, pruned: bool) -> Path:
             "flake_rate": 0.0,
             "replacement_lineage": [],
         }
-        if kind == "pytest":
-            declared["size"] = "small"
         return declared
 
     manifest = {
@@ -159,8 +157,8 @@ def _write_estate(root: Path, *, pruned: bool) -> Path:
         "audit_ledger": "reports/reset.jsonl",
         "witness_ledger": "reports/witnesses.jsonl",
         "mutation": {"tool": None, "reason": "The fixture declares no mutation tool."},
-        "size_ceilings_seconds": {"small": 2, "medium": 20, "large": 200},
-        "time_budget": {"test_lane_seconds": 10, "tolerance": 0.25, "reference_machine": None},
+        "adoption": {"mode": "complete"},
+        "hang_timeout_seconds": 1800,
         "critical_risks": {
             "custody": {"state": "applicable", "direct_proof": live[0]},
             "deploy": {
@@ -215,7 +213,7 @@ def test_live_reset_validates(estate: Path, tmp_path: Path) -> None:
     assert governance.validate(REPO_ROOT)["state"] == "valid"
 
 
-def test_size_ceilings_and_lane_budget_survive_timing_noise(
+def test_runtime_is_diagnostic_and_stale_records_are_unmeasured(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -232,15 +230,9 @@ def test_size_ceilings_and_lane_budget_survive_timing_noise(
         for item in (node, slow)
     ]
     manifest = {
-        "families": [
-            {"id": "x", "kind": "pytest", "selectors": ["tests/test_x.py"], "size": "small"}
-        ],
-        "size_ceilings_seconds": {"small": 2, "medium": 20, "large": 200},
-        "time_budget": {
-            "test_lane_seconds": 10,
-            "tolerance": 0.25,
-            "reference_machine": governance.machine_fingerprint(),
-        },
+        "families": [{"id": "x", "kind": "pytest", "selectors": ["tests/test_x.py"]}],
+        "adoption": {"mode": "complete"},
+        "hang_timeout_seconds": 1800,
     }
     monkeypatch.setattr(governance, "inventory", lambda _root: {"proofs": proofs})
     monkeypatch.setattr(governance, "load_yaml", lambda _path: copy.deepcopy(manifest))
@@ -266,43 +258,38 @@ def test_size_ceilings_and_lane_budget_survive_timing_noise(
             + "</testsuite></testsuites>"
         )
 
-    assert governance.timing(tmp_path)["reason"] == "no full-run timing record"
+    # Large elapsed times remain diagnostic, with no hidden confirming reruns.
+    def no_automatic_run(*args, **kwargs):
+        pytest.fail("timing must read existing data without running tests")
+
+    monkeypatch.setattr(governance, "_run", no_automatic_run)
+
+    assert governance.timing(tmp_path)["state"] == "unmeasured", "missing timing must be unmeasured"
+    assert governance.timing(tmp_path)["reason"] == "no full-run timing record", (
+        "missing timing must explain the missing record"
+    )
     recorded(8.0, 1.5)
     observed = governance.timing(tmp_path)
-    assert (observed["state"], observed["budget"]) == ("measured", "within")
-    assert observed["slowest"][0] == {"proof": f"pytest:{slow}", "seconds": 1.5}
+    assert observed["state"] == "measured", "ordinary runtime is diagnostic"
+    assert observed["slowest"][0] == {"proof": f"pytest:{slow}", "seconds": 1.5}, (
+        "report the observed leaf duration"
+    )
 
-    # One noisy run over budget-plus-tolerance is advisory; three confirming runs fail.
-    recorded(12.6, 1.5)
-    assert governance.timing(tmp_path)["budget"].startswith("advisory")
-    runs = iter([12.6, 12.7, 12.8])
-
-    def full_run(command: list[str], _root: Path, check: bool = True):
-        recorded(next(runs), 1.5)
-        return subprocess.CompletedProcess(command, 0, "", "")
-
-    monkeypatch.setattr(governance, "_run", full_run)
-    confirmed = governance.timing(tmp_path, samples=3)
-    assert (confirmed["state"], confirmed["budget"], confirmed["samples"]) == ("fail", "over", 3)
-
-    # A budget set on one machine is never judged on another, but size ceilings still bind.
-    manifest["time_budget"]["reference_machine"] = "0" * 16
-    recorded(99.0, 2.5)
-    foreign = governance.timing(tmp_path)
-    assert foreign["budget"] == "unmeasured: this is not the reference machine"
-    assert foreign["state"] == "fail"
-    assert "over the small ceiling of 2s for family x" in foreign["size_violations"][0]
+    recorded(9999.0, 2500.0)
+    slow_report = governance.timing(tmp_path)
+    assert slow_report["state"] == "measured", "slow runtime must remain diagnostic"
+    assert slow_report["test_lane_seconds"] == 9999.0, "report the observed suite duration"
 
     # A record from a different estate is stale, not a measurement.
     recorded(1.0, 0.1, cases=("fast", "slow", "gone"))
-    assert (
-        governance.timing(tmp_path)["reason"]
-        == "the timing record predates the current pytest estate"
-    )
+    assert governance.timing(tmp_path)["state"] == "unmeasured", "stale timing must be unmeasured"
+    assert governance.timing(tmp_path)["reason"] == (
+        "the timing record predates the current pytest estate"
+    ), "stale timing must explain the inventory mismatch"
     recorded(1.0, 0.1, cases=("fast",))
-    assert governance.timing(tmp_path)["state"] == "unmeasured"
-    manifest["size_ceilings_seconds"]["medium"] = 1
-    with pytest.raises(governance.GovernanceError, match="increase from small to large"):
+    assert governance.timing(tmp_path)["state"] == "unmeasured", "partial timing must be unmeasured"
+    manifest["hang_timeout_seconds"] = float("nan")
+    with pytest.raises(governance.GovernanceError, match="finite and positive"):
         governance.timing(tmp_path)
 
 
@@ -602,7 +589,9 @@ def _witness_repo(root: Path, guard: str = "deny\n", *, validates_itself: bool =
 
 def test_witness_observes_red_restores_exactly_and_records_a_receipt(tmp_path: Path) -> None:
     root = _witness_repo(tmp_path, validates_itself=True)
-    governance.witness_begin(root, **WITNESS)
+    check = root / "check.sh"
+    check.write_text(check.read_text().replace("exit 1", "exit 101"))
+    governance.witness_begin(root, failure_exit=101, **WITNESS)
     (root / "guard.txt").write_text("allow\n")
     planted_second = int((root / "guard.txt").stat().st_mtime)
     receipt = governance.witness_finish(root)
@@ -611,8 +600,14 @@ def test_witness_observes_red_restores_exactly_and_records_a_receipt(tmp_path: P
     assert int((root / "guard.txt").stat().st_mtime) > planted_second
     assert not (root / governance.WITNESS_PENDING).exists()
     assert governance.load_ledger(root / "reports/witnesses.jsonl") == [receipt]
-    assert receipt["paths"] == ["guard.txt"] and receipt["defect"] == WITNESS["defect"]
+    assert (
+        receipt["paths"] == ["guard.txt"]
+        and receipt["defect"] == "Completed failure exit 101: " + WITNESS["defect"]
+    )
     assert governance._receipt_errors(receipt, 1, set(WITNESS["proof_ids"])) == []
+
+    with pytest.raises(governance.GovernanceError, match="failure-exit must identify"):
+        governance.witness_begin(root, failure_exit=124, **WITNESS)
 
 
 def test_witness_refuses_anything_short_of_the_named_failure(tmp_path: Path) -> None:
@@ -702,3 +697,376 @@ def test_receipts_are_validated_and_an_admitted_proof_must_have_one(
         change[0] = damaged
         with pytest.raises(governance.GovernanceError, match=message):
             governance.validate(estate)
+
+
+def test_bounded_adoption_reports_pending_without_discarding_proofs(
+    estate: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    original_yaml, original_ledger, original_inventory = (
+        governance.load_yaml,
+        governance.load_ledger,
+        governance.inventory,
+    )
+    step = [0]
+    kept, case = SAMPLE + "test_kept", SAMPLE + "test_cases[1]"
+    keeper = SAMPLE + "test_cases[2]"
+
+    def bounded(path):
+        result = original_yaml(path)
+        result["adoption"] = {
+            "mode": "complete" if step[0] == 4 else "bounded",
+            "reason": "One named fixture contract per batch.",
+        }
+        if step[0] >= 2:
+            result["critical_risks"]["custody"]["direct_proof"] = keeper
+        return result
+
+    def progression(path):
+        rows = original_ledger(path)
+        if path.name == "witnesses.jsonl":
+            return rows + [{**rows[0], "proof_ids": [kept]}]
+        if path.name != "reset.jsonl":
+            return rows
+        retained = [
+            r
+            for r in rows
+            if r["record_type"] == "proof_disposition" and r["disposition"] == "retain"
+        ]
+        result = [r for r in rows if r not in retained]
+        source = next(r for r in retained if r["proof_id"] == kept)
+        if step[0] >= 1:
+            result.append(
+                {
+                    **source,
+                    "record_type": "proof_modification",
+                    "disposition": "repair",
+                    "witness_receipts": [2],
+                }
+            )
+        if step[0] >= 2:
+            result.append({**source, "disposition": "consolidate", "replacement": keeper})
+        if step[0] >= 3:
+            result.append(
+                {
+                    **source,
+                    "record_type": "proof_retirement",
+                    "proof_id": case,
+                    "disposition": "consolidate",
+                    "replacement": keeper,
+                }
+            )
+        if step[0] == 4:
+            retired = {r["proof_id"] for r in result if r["record_type"] == "proof_retirement"}
+            result.extend(r for r in retained if r["proof_id"] not in retired | {kept})
+        return result
+
+    def live(root):
+        result = original_inventory(root)
+        removed = ({kept} if step[0] >= 2 else set()) | ({case} if step[0] >= 3 else set())
+        result["proofs"] = [r for r in result["proofs"] if r["id"] not in removed]
+        return result
+
+    monkeypatch.setattr(governance, "load_yaml", bounded)
+    monkeypatch.setattr(governance, "load_ledger", progression)
+    monkeypatch.setattr(governance, "inventory", live)
+    for stage, pending in enumerate((6, 6, 5, 4, 0)):
+        step[0] = stage
+        assert governance.validate(estate)["pending_baseline_review"] == pending, (
+            f"pending review count at batch {stage}"
+        )
+
+
+def test_modification_must_reference_its_own_unreused_observation(
+    estate: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    original = governance.load_ledger
+    mode = ["valid"]
+
+    def modified(path):
+        rows = original(path)
+        if path.name == "reset.jsonl":
+            admission = next(row for row in rows if row["record_type"] == "proof_admission")
+            event = {
+                **admission,
+                "record_type": "proof_modification",
+                "disposition": "repair",
+                "witness_receipts": [1],
+            }
+            rows.append(event)
+            if mode[0] == "reused":
+                rows.append(dict(event))
+            elif mode[0] == "absent":
+                event["witness_receipts"] = []
+            elif mode[0] == "wrong":
+                event["witness_receipts"] = [999]
+            elif mode[0] == "other-proof":
+                event["witness_receipts"] = [2]
+        elif path.name == "witnesses.jsonl":
+            rows.append({**rows[0], "proof_ids": [SAMPLE + "test_kept"]})
+        return rows
+
+    monkeypatch.setattr(governance, "load_ledger", modified)
+    # Successful status shape is already proved by test_live_reset_validates.
+    governance.validate(estate)
+
+    def refuses(value: str, message: str) -> None:
+        mode[0] = value
+        try:
+            governance.validate(estate)
+        except governance.GovernanceError as exc:
+            assert message in str(exc), f"wrong refusal for {value}"
+        else:
+            pytest.fail(f"modification incorrectly accepted {value}")
+
+    refuses("reused", "reuses an earlier")
+    refuses("absent", "needs witness")
+    refuses("wrong", "invalid witness")
+    refuses("other-proof", "does not witness its proof")
+
+
+def test_hang_supervision_preserves_failures_and_stops_chattering_children(tmp_path: Path) -> None:
+    import os
+    import sys
+    import time
+
+    from agentic_starter.test_runner import run_command
+
+    failed = run_command(
+        [sys.executable, "-c", "print('expected assertion'); raise SystemExit(1)"],
+        cwd=tmp_path,
+        capture=True,
+    )
+    assert failed.returncode == 1, "completed failure status must survive"
+    assert "expected assertion" in failed.stdout, "completed failure output must survive"
+    child_pid = tmp_path / "child.pid"
+    child = "import signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(30)"
+    code = (
+        "import subprocess,sys,time,pathlib; "
+        f"p=subprocess.Popen([sys.executable,'-c',{child!r}]); "
+        f"pathlib.Path({str(child_pid)!r}).write_text(str(p.pid)); "
+        "exec('while True: print(\"alive\",flush=True); time.sleep(.02)')"
+    )
+    result = run_command([sys.executable, "-c", code], cwd=tmp_path, timeout=5, capture=True)
+    assert child_pid.exists(), "SETUP INCOMPLETE: child never reached readiness"
+    pid = int(child_pid.read_text())
+    try:
+        assert result.returncode == 124, "hang must be incomplete"
+        assert "INCOMPLETE" in result.stderr, "hang must have an incomplete diagnostic"
+        assert "alive" in result.stdout, "partial chatter output must survive cleanup"
+        for _ in range(50):
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                break
+            time.sleep(0.02)
+        else:
+            pytest.fail("inherited child survived timeout cleanup")
+    finally:
+        # The fixture owns exactly this non-forking child, even during red challenges.
+        import signal
+
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+
+
+def test_incomplete_exit_cannot_supply_a_red_witness(tmp_path: Path) -> None:
+    root = _witness_repo(tmp_path)
+    governance.witness_begin(root, **WITNESS)
+    (root / "guard.txt").write_text("allow\n")
+    original = governance._witness_run
+    try:
+        governance._witness_run = lambda command, root: (
+            (124, WITNESS["expect"])
+            if (root / "guard.txt").read_text() == "allow\n"
+            else original(command, root)
+        )
+        with pytest.raises(governance.GovernanceError, match="incomplete, interrupted"):
+            governance.witness_finish(root)
+    finally:
+        governance._witness_run = original
+    assert (root / "guard.txt").read_text() == "deny\n"
+    assert not (root / "reports/witnesses.jsonl").exists()
+
+
+def test_governance_child_incomplete_remains_incomplete(
+    estate: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def interrupted_collection(root):
+        return governance._run([sys.executable, "-c", "raise SystemExit(124)"], root)
+
+    monkeypatch.setattr(governance, "collect_pytest", interrupted_collection)
+    result = governance.main(["--root", str(estate), "inventory"])
+    error = capsys.readouterr().err
+    assert result == 124, "governance must preserve the incomplete exit"
+    assert "TEST GOVERNANCE INCOMPLETE" in error, "governance must label incomplete collection"
+    assert "TEST GOVERNANCE ERROR" not in error, "incomplete collection is not a refusal"
+
+
+@pytest.mark.parametrize("leader_exit", [0, 1])
+def test_outstanding_child_makes_completed_leader_incomplete(
+    tmp_path: Path, leader_exit: int
+) -> None:
+    import signal
+    import time
+
+    from agentic_starter.test_runner import run_command
+
+    ready = tmp_path / "ready"
+    child = (
+        "import os,signal,time,pathlib; signal.signal(signal.SIGTERM,signal.SIG_IGN); "
+        f"pathlib.Path({str(ready)!r}).write_text(str(os.getpid())); time.sleep(30)"
+    )
+    leader = (
+        "import subprocess,sys,pathlib,time; "
+        f"subprocess.Popen([sys.executable,'-c',{child!r}],"
+        "stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL); "
+        f"ready=pathlib.Path({str(ready)!r}); "
+        "deadline=time.monotonic()+10; "
+        "exec('while not ready.exists() and time.monotonic()<deadline: time.sleep(.02)'); "
+        f"raise SystemExit({leader_exit})"
+    )
+    pid = None
+    try:
+        result = run_command([sys.executable, "-c", leader], cwd=tmp_path, capture=True)
+        assert ready.exists(), "SETUP INCOMPLETE: leftover child never became ready"
+        pid = int(ready.read_text())
+        assert result.returncode == 124, f"outstanding group after exit {leader_exit} is incomplete"
+        assert "INCOMPLETE" in result.stderr, (
+            f"outstanding group after exit {leader_exit} needs a diagnostic"
+        )
+        for _ in range(50):
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                break
+            time.sleep(0.02)
+        else:
+            pytest.fail(f"outstanding child after exit {leader_exit} survived cleanup")
+    finally:
+        if pid is None and ready.exists():
+            pid = int(ready.read_text())
+        if pid is not None:
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+
+
+def test_governance_allows_nested_supervisor_cleanup(tmp_path: Path, monkeypatch) -> None:
+    import functools
+    import signal
+    import time
+
+    ready = tmp_path / "ready"
+    child = (
+        "import os,signal,time,pathlib; signal.signal(signal.SIGTERM,signal.SIG_IGN); "
+        f"pathlib.Path({str(ready)!r}).write_text(str(os.getpid())); time.sleep(30)"
+    )
+    inner = (
+        "import sys; from pathlib import Path; "
+        f"sys.path.insert(0,{str(REPO_ROOT / 'lib')!r}); "
+        "from agentic_starter.test_runner import run_command; "
+        f"r=run_command([sys.executable,'-c',{child!r}],cwd=Path.cwd(),timeout=30); "
+        "raise SystemExit(r.returncode)"
+    )
+    monkeypatch.setattr(
+        governance, "run_command", functools.partial(governance.run_command, timeout=5)
+    )
+    pid = None
+    try:
+        result = governance._run([sys.executable, "-c", inner], tmp_path, check=False)
+        assert ready.exists(), "SETUP INCOMPLETE: nested child never became ready"
+        pid = int(ready.read_text())
+        assert result.returncode == 124, "nested incomplete status must survive governance"
+        for _ in range(50):
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                break
+            time.sleep(0.02)
+        else:
+            pytest.fail("outer supervisor killed inner cleanup before its resistant child")
+    finally:
+        if pid is None and ready.exists():
+            pid = int(ready.read_text())
+        if pid is not None:
+            try:
+                os.killpg(pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+
+
+@pytest.mark.parametrize("mode", ["timeout", "term", "double-term", "hup", "completed-error"])
+def test_real_supervisor_entrypoint_handles_deadlines_and_signals(
+    tmp_path: Path, mode: str
+) -> None:
+    import os
+    import signal
+    import time
+
+    root = tmp_path / "runner"
+    script = root / "lib/agentic_starter/test_runner.py"
+    script.parent.mkdir(parents=True)
+    script.write_bytes((REPO_ROOT / "lib/agentic_starter/test_runner.py").read_bytes())
+    (root / "tests").mkdir()
+    (root / "tests/proof-estate.yaml").write_text(
+        "hang_timeout_seconds: " + ("5" if mode == "timeout" else "30")
+    )
+    ready = root / "ready"
+    code = (
+        "import os,signal,time,pathlib; signal.signal(signal.SIGTERM,signal.SIG_IGN); "
+        f"pathlib.Path({str(ready)!r}).write_text(str(os.getpid())); "
+        "print('ready',flush=True); time.sleep(30)"
+    )
+    if mode == "completed-error":
+        code = "raise SystemExit(2)"
+    process = subprocess.Popen(
+        [sys.executable, str(script), "-c", code],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    )
+    child_pid = None
+    try:
+        if mode != "completed-error":
+            deadline = time.monotonic() + 10
+            while not ready.exists() and process.poll() is None and time.monotonic() < deadline:
+                time.sleep(0.02)
+            assert ready.exists(), "SETUP INCOMPLETE: supervised child never became ready"
+            child_pid = int(ready.read_text())
+        if mode in ("term", "double-term", "hup"):
+            process.send_signal(signal.SIGHUP if mode == "hup" else signal.SIGTERM)
+            if mode == "double-term":
+                time.sleep(0.05)
+                process.send_signal(signal.SIGTERM)
+        try:
+            process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            pytest.fail("supervisor did not terminate its invocation")
+        if mode == "completed-error":
+            assert process.returncode == 2, "completed non-assertion error status must survive"
+        else:
+            assert process.returncode == 124, "entrypoint interruption must remain incomplete"
+            for _ in range(50):
+                try:
+                    os.kill(child_pid, 0)
+                except ProcessLookupError:
+                    break
+                time.sleep(0.02)
+            else:
+                pytest.fail("supervisor left its inherited child alive")
+        output, error = process.communicate(timeout=2)
+        if mode != "completed-error":
+            assert "INCOMPLETE" in error, "entrypoint must label incomplete outcomes"
+    finally:
+        # Only these two fixture-owned, non-forking groups are in the cleanup set.
+        for group in (child_pid, process.pid):
+            if group is not None:
+                try:
+                    os.killpg(group, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+        process.communicate(timeout=2)
