@@ -36,7 +36,7 @@ The preview serves only the checked output. It does not create network routes. F
 
 ## Prepare GitHub Pages
 
-The prepared workflow is `manual/github-pages.yml`. Installing it under `.github/workflows/docs-pages.yml` requires the owner's explicit approval of its `pages: write` and `id-token: write` deployment permissions, the Pages publishing source, and the protected `github-pages` environment. The command refuses until an approved workflow is installed. It never enables Pages or grants permissions itself.
+Starter installs its approved workflow at `.github/workflows/docs-pages.yml`, with read-only default permissions and Pages-write/OIDC-token permissions confined to the deployment job. Its `github-pages` environment allows only `master`. Continuous deployment stays off unless explicitly enabled. The generic recipient template remains at `manual/github-pages.yml`; installing it in another repository requires that owner's explicit approval of the permissions, publishing source and deployment environment. The command refuses until an approved workflow is installed. It never enables Pages or grants permissions itself.
 
 The workflow uploads only fresh, validated book output. Continuous deployment defaults off. Configure `deploy.repository`, `deploy.release_branch`, `deploy.workflow`, and `deploy.url` in `documentation.toml`, and the corresponding `site-url` prefix in `manual/book.toml`. `master` is the default release branch; a project may configure `main` or another existing branch. Branch selection does not rename a repository's branch.
 

@@ -17,6 +17,7 @@ active:
   - "/.claude/**"
   - "/.codex/**"
   - "/.githooks/**"
+  - "/.github/**"
   - "/bin/**"
   - "/briefs/**"
   - "/docs/**"
