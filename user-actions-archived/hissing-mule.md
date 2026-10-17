@@ -1,7 +1,8 @@
 ---
 slug: hissing-mule
 title: Approve the prepared GitHub Pages publication permissions
-status: pending
+status: done
+closed: 2026-10-16
 category: access
 urgency: medium
 blocks:
@@ -25,3 +26,7 @@ After approval, the agent can deliver the workflow through the normal gates, man
 The live-site checks include deep pages, anchors, search, 404/assets and private-path exclusions. The README receives a live link only after those checks succeed. The prepared Linux workflow has not run; the standing Linux lane passed the five behavior proofs but lacks Cargo, so renderer provisioning there remains unverified.
 
 Close this action only when the operator supplies the scoped permission decision. Do not infer approval from a general publication request or a presentation acknowledgment.
+
+## Disposition
+
+The owner supplied the exact scoped approval on 2026-10-17 UTC through the existing coordinator, with the attributable question and affirmative response preserved on the task. Applied and directly read back the Actions Pages source and master-only deployment environment; retained read-only workflow defaults and left the continuous switch unset/off. The manual workflow built the pinned tools and curated manual on Ubuntu, deployed successfully, and passed public chapter/asset/search/exclusion probes and browser deep-link, keyboard search and custom 404 checks. The README now names the verified live manual. No broader credential or network changes were made. No recurring learning; the existing approval and verification policies governed this action.
