@@ -171,6 +171,7 @@ The [project guidance](CLAUDE.md#project-specific-skills) lists the full skill s
 
 ## Full documentation
 
+- [The user manual](manual/src/index.md) explains the current methodology, skills, commands and documentation workflow. Build and open it with `./bin/docs`; its live Pages link is added after deployment has been verified.
 - [Wolf's Agentic Coding Starter Kit: An introduction](briefs/methodology-treatise.md) is the general explanation of the repository and its principles.
 - [The product brief](briefs/BRIEF.md) defines what this Starter Kit provides, who it is for, and its acceptance criteria.
 - [The methodology](briefs/methodology.md) gives the complete eleven-step process and operating doctrine.

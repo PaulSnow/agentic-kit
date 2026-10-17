@@ -43,9 +43,8 @@ critical_risks:
     state: applicable
     direct_proof: pytest:tests/test_check.py::test_all_is_default_locked_ordered_and_cwd_independent
   deploy:
-    state: not-applicable
-    rationale: The template has no deployment surface.
-    activation_trigger: Adding any deployment or publication command makes direct deploy proof mandatory.
+    state: applicable
+    direct_proof: pytest:tests/test_documentation.py::test_deploy_binds_clean_latest_release_and_preserves_manual_mode
 families:
 - id: example-cli
   kind: pytest
@@ -1009,3 +1008,44 @@ families:
   flake_rate: 0.0
   replacement_lineage:
   - pytest:tests/test_kickoff_evidence.py::test_init_creates_complete_run_scoped_evidence
+- id: documentation-boundaries
+  kind: pytest
+  selectors:
+  - tests/test_documentation.py
+  source_paths: &documentation_paths
+  - bin/docs
+  - lib/agentic_starter/documentation.py
+  - tests/test_documentation.py
+  - documentation.toml
+  - manual/**
+  - policies/software-documentation.md
+  covers: *documentation_paths
+  contract: Curated documentation and its deployment stay bound to public input and a validated release candidate.
+  risk_class: publication-custody
+  oracle: Violating source/output/release inputs refuse before publication; exact tools install locally and CI identity is checked.
+  admission: Five bounded in-process scenarios; no network, compilation, persistent server or external API use.
+  nearest_overlap: Existing treatise proofs govern editorial authority; no prior proof exercises a rendered manual or Pages dispatch custody.
+  tier: changed
+  flake_rate: 0.0
+  replacement_lineage: []
+- id: gate-documentation
+  kind: gate
+  selectors:
+  - policy-docs
+  source_paths:
+  - bin/check
+  - bin/docs
+  - documentation.toml
+  - manual/**
+  covers:
+  - bin/check
+  - bin/docs
+  - manual/**
+  contract: The repository gate builds and validates its current public manual.
+  risk_class: publication-drift
+  oracle: A missing local page makes the real documentation command fail with its broken-link diagnostic.
+  admission: One actual renderer build per full gate; fixture tests cannot prove the live manual renders.
+  nearest_overlap: In-process documentation proofs do not render the real source or run the pinned plugin.
+  tier: full
+  flake_rate: 0.0
+  replacement_lineage: []

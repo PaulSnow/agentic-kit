@@ -75,7 +75,7 @@ Every catalog row dates its pin. A pin is never silently refreshed: re-pinning i
 
 ## Portability
 
-`docs/README.md` — the catalog shape and its header — is part of the methodology contract and ships with `stamp` and `teach`. Pinned *content* is project state: the template's own pins are never copied into a derived project, and a `learn` pass never absorbs a donor's pins.
+`docs/README.md` — the catalog shape and its header — is part of the methodology contract and ships with `stamp` and `teach`. Project-specific pinned content is project state and is never copied into a derived project; a `learn` pass never absorbs a donor's project pins. The shared software-documentation baseline is a toolchain exception: the mdBook/admonish versioned reference directories and the three minimal reader-needs/docs-as-code/accessibility excerpts travel with their policy, source attribution/license and exact tool pins. Retain only those catalog rows when stamping; a changed recipient toolchain deliberately re-pins its authority.
 
 ## Enforcement
 

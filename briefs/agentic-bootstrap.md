@@ -7,6 +7,8 @@ scope: Procedure for using this repository as a master template to stand up a ne
 
 # Standing Up a New Project From This Template
 
+The documentation bundle includes `bin/docs`, its shared module and behavioral proofs, exact renderer/plugin/compiler pins, generated admonish CSS/license, and the docs skill/mirror. Each new project receives a product-specific Markdown/mdBook manual under `manual/`, a recipient-adapted `documentation.toml`, loopback preview and disabled continuous deployment. Preserve the third-party-only `docs/` catalog. Do not copy Starter's manual or publication identity; new Pages/OIDC/network grants remain explicit owner decisions. The recipient's full gate includes `bin/docs check`, and its proof estate retains direct publication-custody evidence.
+
 ## Primary ownership and independent advice
 
 As of 2026-09-07, the primary use case is a configured SOTA instance that owns orchestration, planning, implementation and acceptance. A comparable or stronger model in another permitted provider's harness normally supplies independent plan and code advice; a single-provider environment uses fresh instances of the primary model. One comprehensive pass per stage is normal, a second needs recorded cause, and two is the maximum. Advisers report evidence and severity without veto; the primary decides corrections and records consequential dispositions. Objective requirements and both close gates remain binding.
@@ -182,6 +184,7 @@ A project derived from this template contains the following **portable structure
       ask/SKILL.md         # Universal: operator-invoked inventory of open decisions
       refactor/SKILL.md    # Universal: behavior-preserving refactoring and simplification pass
       mutate/SKILL.md      # Universal: operator-invoked mutation survey of the tests
+      docs/SKILL.md        # Universal: build, review and publish the product manual
       # stamp is NOT carried over — the new project doesn't need to stamp
       # out more projects from itself by default
     agents/
@@ -282,6 +285,7 @@ These files encode the methodology itself, not any particular product. Copy them
 - `.claude/skills/ask/SKILL.md` (universal operator-invoked inventory of open decisions; never model-triggered)
 - `.claude/skills/refactor/SKILL.md` (universal behavior-preserving refactoring and simplification pass; reasoning in `briefs/refactoring-methodology.md`)
 - `.claude/skills/mutate/SKILL.md` (universal operator-invoked mutation survey; reasoning in `briefs/test-suite-value-governance.md`)
+- `.claude/skills/docs/SKILL.md` (universal product-manual build, preview and approved publication)
 - `.claude/settings.json` (portable harness defaults; `worktree.bgIsolation: none` disables implicit background worktrees without disabling explicit ones)
 - `.claude/agents/phase-planner.md`
 - `.claude/agents/plan-reviewer.md`
@@ -303,9 +307,10 @@ These files encode the methodology itself, not any particular product. Copy them
 - `.agents/skills/ask` (directory symlink → `../../.claude/skills/ask`)
 - `.agents/skills/refactor` (directory symlink → `../../.claude/skills/refactor`)
 - `.agents/skills/mutate` (directory symlink → `../../.claude/skills/mutate`)
+- `.agents/skills/docs` (directory symlink → `../../.claude/skills/docs`)
 - `AGENTS.md` symlink → `CLAUDE.md`
 - Every file under `policies/` (these are universal by design)
-- `docs/README.md` — the pinned-document catalog shape (header and column contract) with every row dropped; pinned content is project state and never transfers
+- `docs/README.md` — the pinned-document catalog shape with every row dropped except the shared software-documentation baseline rows; project-specific pinned documents never transfer. The licensed baseline pins travel with their toolchain/policy.
 - `policies/test-suite-governance.md` and `briefs/test-suite-value-governance.md` (the universal proof-estate contract; recipient-local values are generated later)
 - `bin/kickoff-config` (universal Python/uv round-trip config manager, fail-closed venue preflight, execution watchdog, research-budget authority, and telemetry calibrator), plus human-editable `kickoff.yaml`, copied with the comments that explain its shipped defaults (`bin/kickoff-config reset` returns a section to those defaults later and rewrites it without them, so a fresh copy is not reset)
 - `tests/test_kickoff_config.py` (universal manager/watchdog behavioral coverage; run independently of the deliverable's language)
@@ -366,7 +371,7 @@ These files have a stable shape and a project-specific body. Mirror the shape; w
 - Every dated directory under `reports/execution/`, and the root `EXECUTION_LOG.jsonl` — this repository's own execution history. A new project that kept them would present another repository's phases as its own.
 - `briefs/eacp-pattern-map.md`, `briefs/astra-era-development.md` and `briefs/methodology-treatise.md` — local pattern evidence, workflow-upgrade authority and outward explanation for this repository. A derived project writes its own if it wants them.
 - `LICENSE` and `.vscode/` — the new repository's licensing and editor settings belong to whoever owns it.
-- Every pinned document under this repository's `docs/` and every row of its `docs/README.md` catalog — pins are the template's own dependencies, not the new project's. The catalog file itself transfers with its header and no rows.
+- Every project-specific pin under this repository's `docs/` and its catalog row stays behind. The shared software-documentation baseline pins travel with their toolchain/policy; the catalog retains only those rows.
 - This repository's `lessons/`, `lessons-archived/`, `user-actions/`, and `user-actions-archived/` entries — every ledger starts empty, with only a `.gitkeep` in each of the four so the directories survive the first commit.
 
 If in doubt, ask: "does this file describe the methodology or a universally useful agentic capability, or does it describe the template itself?" Methodology and universal-capability files transfer; template-specific files don't.
@@ -441,9 +446,10 @@ Then create the empty directory shape:
 .claude/skills/ask/
 .claude/skills/refactor/
 .claude/skills/mutate/
+.claude/skills/docs/
 .claude/agents/
 .codex/agents/
-.agents/skills/        # (the fifteen skill entries here are directory symlinks
+.agents/skills/        # (the sixteen skill entries here are directory symlinks
                        #  to ../../.claude/skills/<name>, created in Step 5)
 briefs/
 docs/
@@ -470,7 +476,7 @@ In this exact order (each feeds the next):
      - `## Project briefs` — `briefs/` entries specific to this project (initially `BRIEF.md` only).
      - `## Project surfaces` — the deliverable (location, language, seed code description).
      - `## Project conventions` — language, tooling, build-gate command shape.
-     - `## Project-specific skills` — any beyond the universal fifteen. Omit if none.
+     - `## Project-specific skills` — any beyond the universal sixteen. Omit if none.
 
 3. **`AGENTS.md`** — symlink to `CLAUDE.md`:
    ```bash
@@ -505,13 +511,14 @@ Copy verbatim, then adapt project names and surface-specific build-gate commands
 - `.claude/skills/ask/SKILL.md`
 - `.claude/skills/refactor/SKILL.md`
 - `.claude/skills/mutate/SKILL.md`
+- `.claude/skills/docs/SKILL.md`
 - `.claude/settings.json`
 - `.claude/agents/phase-planner.md`
 - `.claude/agents/plan-reviewer.md`
 - `.claude/agents/phase-coder.md`
 - `.claude/agents/code-critic.md`
 - `.codex/agents/*.toml`
-- `.agents/skills/{kickoff,methodology,rule-one,learn,teach,roles,sweep,sweep-planning,sweep-coding,demo,treatise,plain,ask,refactor,mutate}` (directory symlinks → `../../.claude/skills/<name>`)
+- `.agents/skills/{kickoff,methodology,rule-one,learn,teach,roles,sweep,sweep-planning,sweep-coding,demo,treatise,plain,ask,refactor,mutate,docs}` (directory symlinks → `../../.claude/skills/<name>`)
 
 Port Rule One as one atomic methodology unit:
 
@@ -642,7 +649,7 @@ Before declaring the bootstrap complete, verify:
 - `bin/check-catalogs` accepts the initial idle ledger with exactly one `⬅️` and resolves every current-candidate internal Markdown link.
 - `head -1 LOG.md` is `# Activity Log`.
 - `ls .claude/agents/` lists exactly the four canonical role files.
-- Each of `.claude/skills/{kickoff,methodology,rule-one,learn,teach,roles,sweep,sweep-planning,sweep-coding,demo,treatise,plain,ask,refactor,mutate}/` contains `SKILL.md`, and each corresponding `.agents/skills/<name>` entry is a directory symlink to `../../.claude/skills/<name>`.
+- Each of `.claude/skills/{kickoff,methodology,rule-one,learn,teach,roles,sweep,sweep-planning,sweep-coding,demo,treatise,plain,ask,refactor,mutate,docs}/` contains `SKILL.md`, and each corresponding `.agents/skills/<name>` entry is a directory symlink to `../../.claude/skills/<name>`.
 - `briefs/rule-one-diagnostic-learning.md` exists alongside the Rule One skill.
 - `bin/lessons validate`, `bin/check-catalogs`, and their behavioral tests pass against the empty initial ledger and Phase 1 status table.
 - `bin/kickoff-config show` succeeds and `kickoff.yaml` contains valid `role_models`, `role_timeouts`, and `research_budgets` sections.
@@ -747,11 +754,12 @@ Bootstrap is complete when **all** of the following hold:
 [ ] .claude/skills/ask/SKILL.md exists (verbatim from template)
 [ ] .claude/skills/refactor/SKILL.md exists (verbatim from template)
 [ ] .claude/skills/mutate/SKILL.md exists (verbatim from template)
+[ ] .claude/skills/docs/SKILL.md exists with its mirror and recipient-adapted manual/tooling
 [ ] .claude/skills/stamp/ does NOT exist (starter-only meta-skill)
 [ ] .claude/agents/{phase-planner,plan-reviewer,phase-coder,code-critic}.md
     exist, adapted for this project
 [ ] .codex/agents/*.toml mirrors exist
-[ ] .agents/skills/{kickoff,methodology,rule-one,learn,teach,roles,sweep,sweep-planning,sweep-coding,demo,treatise,plain,ask,refactor,mutate} exist as directory
+[ ] .agents/skills/{kickoff,methodology,rule-one,learn,teach,roles,sweep,sweep-planning,sweep-coding,demo,treatise,plain,ask,refactor,mutate,docs} exist as directory
     symlinks to ../../.claude/skills/<name> (the canonical skill directory)
 [ ] .agents/skills/stamp does NOT exist (starter-only, must not propagate)
 [ ] .claude/settings.json sets worktree.bgIsolation to none while explicit

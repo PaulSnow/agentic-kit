@@ -69,6 +69,7 @@ See also [universal skills](#universal-skills).
 - [Dated loading and continuity guidance](briefs/session-context-compaction.md)
 - [Proof-estate design](briefs/test-suite-value-governance.md)
 - [Minimal methodology scaffold](briefs/mini-method.md)
+- [Reader-centered documentation](briefs/software-documentation.md)
 - [Refactoring method and sources](briefs/refactoring-methodology.md)
 
 ## Policies catalog
@@ -79,6 +80,7 @@ Every applicable policy binds.
 - [Brief lifecycle](policies/briefs.md)
 - [Authority direction](policies/briefs-and-policies.md)
 - [Reference pins](policies/docs.md)
+- [Software documentation](policies/software-documentation.md)
 - [Mirrors and loading](policies/cross-harness-parity.md)
 - [Roles and convergence](policies/four-canonical-agents.md)
 - [Role routing](policies/role-models.md)
@@ -130,6 +132,7 @@ Every applicable policy binds.
 - [ask](.claude/skills/ask/SKILL.md)
 - [refactor](.claude/skills/refactor/SKILL.md)
 - [mutate](.claude/skills/mutate/SKILL.md)
+- [docs](.claude/skills/docs/SKILL.md)
 
 ### Canonical roles and mirrors
 

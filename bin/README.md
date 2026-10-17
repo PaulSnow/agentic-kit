@@ -14,6 +14,10 @@
 
 ## Scripts
 
+### `docs` — build, review and publish the curated manual
+
+`./bin/docs setup` uses exact installed mdBook/admonish versions or installs locked tools under `.kickoff/docs-tools`; the compiler pin is explicit and global tools are unchanged. `./bin/docs` builds and opens the local book. `build` and `check` validate curated sources, generated links/anchors/assets and search/print. `serve` opens a foreground loopback preview; `--url` accepts an existing approved Tailnet proxy URL and creates no route. `deploy` requires the clean latest pushed configured release branch and an already approved Pages workflow; `deploy continuous on|off` changes the explicit push switch without removing manual deployment. `verify` probes the live site and private-path exclusions. A refusal exits nonzero; dispatch does not claim deployment completion or live/browser verification. See [software documentation](../policies/software-documentation.md) and [the manual](../manual/src/documentation.md).
+
 ### `check-candidate-partition` — validate declared paths
 
 `./bin/check-candidate-partition` validates the live declaration and every tracked path. `./bin/check-candidate-partition --staged` validates indexed declaration bytes against the complete index. Missing, malformed, or incomplete classification exits nonzero; a valid declaration reports its digest and tracked-path count. The declaration format and review boundary are owned by [orchestration evidence](../policies/orchestration-evidence.md). The checker runs in the policy gate and opt-in commit hook; it does not install hooks or mutate Git configuration.

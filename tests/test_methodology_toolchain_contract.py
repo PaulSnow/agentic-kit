@@ -13,6 +13,13 @@ import pytest
 from test_check_catalogs import RESOURCES
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+DOCUMENTATION_PINS = {
+    "mdbook-0.4.50",
+    "mdbook-admonish-1.19.0",
+    "diataxis-reader-needs.txt",
+    "writethedocs-docs-as-code.txt",
+    "w3c-accessible-writing.txt",
+}
 
 
 def _normalized(path: Path) -> str:
@@ -237,9 +244,8 @@ def _exercise_transfer_recipes(tmp_path: Path) -> None:
         for resource in RESOURCES:
             assert f"`{resource}`" in resource_row, f"{name}: resource inventory lacks {resource}"
         assert "docs/README.md" in surfaces
-        assert "every row removed" in surfaces or "every row dropped" in surfaces
+        assert "shared software-documentation baseline" in surfaces
         assert "briefs/astra-era-development.md" in exclusions
-        assert "pinned document" in surfaces or "pinned document" in exclusions
         excluded_briefs = set(re.findall(r"briefs/([\w.-]+\.md)", exclusions))
         destination = tmp_path / name
         for skill in sorted((REPO_ROOT / ".claude/skills").iterdir()):
@@ -259,7 +265,17 @@ def _exercise_transfer_recipes(tmp_path: Path) -> None:
         table_rows = [line for line in catalog if line.startswith("|")]
         header = "".join(line for line in catalog if not line.startswith("|"))
         header += "".join(table_rows[:2])
+        header += "".join(
+            row for row in table_rows[2:] if any(f"]({pin}" in row for pin in DOCUMENTATION_PINS)
+        )
         (destination / "docs/README.md").write_text(header)
+        for pin_name in DOCUMENTATION_PINS:
+            source = REPO_ROOT / "docs" / pin_name
+            target = destination / "docs" / pin_name
+            if source.is_dir():
+                shutil.copytree(source, target)
+            else:
+                shutil.copy2(source, target)
         for module in ("workflow.py", "advisory.py"):
             relative = "lib/agentic_starter/" + module
             assert relative in inventory, f"{name}: missing workflow runtime {relative}"
@@ -331,13 +347,13 @@ def _assert_transfer_exclusions(destination: Path) -> None:
     assert not (destination / "briefs/astra-era-development.md").exists(), "local Astra authority"
     assert not (destination / ".claude/skills/stamp").exists(), "local stamp skill"
     entries = {item.name for item in (destination / "docs").iterdir()}
-    assert entries == {"README.md"}, "template pins"
+    assert entries == {"README.md"} | DOCUMENTATION_PINS, "template pins"
     rows = [
         line
         for line in (destination / "docs/README.md").read_text().splitlines()
         if line.startswith("|")
     ]
-    assert len(rows) == 2, "template catalog rows"
+    assert len(rows) == 2 + len(DOCUMENTATION_PINS), "template catalog rows"
 
 
 def _stamp_copy_rule() -> tuple[list[str], list[str]]:

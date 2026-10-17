@@ -272,4 +272,6 @@ Once approved, apply the approved items. Before importing any donor remedy for a
 
 ## Candidate declaration transfer
 
+For documentation, inspect donor manuals, renderer/plugin/compiler pins, native example checks, preview and publication scope read-only. Transfer generic capabilities through `bin/docs`, its shared module/proofs, skill/mirror, policy/brief and recipient-local configuration; never donor content, publication identity, operational records or live Pages/CD/network grants. Keep Starter's first-party manual distinct from third-party pins.
+
 The candidate boundary transfers atomically: `candidate-partition.yaml`, `bin/check-candidate-partition`, `lib/agentic_starter/candidate_boundaries.py`, candidate/evidence managers, the staged hook, gate inventory, and their behavioral fixtures. Generate the recipient's explicit active inventory and retain only its approved bookkeeping exclusions; never copy the donor's path judgments. The declaration remains active, unclassified tracked files refuse, unclassified nonignored untracked files remain included, and complete-tree delivery receipts remain mandatory. Verify the staged checker by actually tripping it in an isolated fixture. The tiny supported YAML subset and pattern syntax are defined in `policies/orchestration-evidence.md`.
