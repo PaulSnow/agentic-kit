@@ -114,6 +114,11 @@
   };
   const themedOption = (option) => {
     const themed = {...option, xAxis: themedAxis(option.xAxis), yAxis: themedAxis(option.yAxis)};
+    if (option.series) {
+      themed.series = option.series.map((series) => series.type === "bar" && series.label?.show
+        ? {...series, label: {...series.label, color: cssColor("--ink"), textBorderWidth: 0}}
+        : series);
+    }
     if (option.tooltip) {
       themed.tooltip = {
         backgroundColor: cssColor("--panel"),
