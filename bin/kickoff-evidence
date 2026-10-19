@@ -2139,6 +2139,38 @@ def validate_finding(value: Any, index: int) -> dict[str, Any]:
     }
 
 
+def command_grant_advice_exception(arguments: argparse.Namespace) -> None:
+    run = validate_run_dir(arguments.run_dir)
+    validate_kickoff_context(
+        Path(run["repository_root"]),
+        run["phase"],
+        run["telemetry_trace_id"],
+        run["telemetry_root_span_id"],
+        open_required=True,
+    )
+    record = load_json(arguments.registration)
+    validate_role_record(record, run)
+    if (
+        run["workflow"]["mode"] != "primary"
+        or record["operation"] != "role.code-review"
+        or record not in load_jsonl(arguments.run_dir / "role-attempts.jsonl")
+    ):
+        raise EvidenceError("exception requires a recorded primary code-advice registration")
+    try:
+        identifier = advisory.grant_exception(
+            Path(run["repository_root"]),
+            run["phase"],
+            arguments.run_dir,
+            record,
+            product_manifest(Path(run["repository_root"]))["candidate_id"],
+            arguments.scope,
+            load_json(arguments.owner_evidence),
+        )
+    except advisory.AdvisoryError as exc:
+        raise EvidenceError(str(exc)) from exc
+    print(f"OWNER EXCEPTION RECORDED {identifier}; one extra launch, default unchanged")
+
+
 def command_start_advice(arguments: argparse.Namespace) -> None:
     run = validate_run_dir(arguments.run_dir)
     record = load_json(arguments.registration)
@@ -2163,6 +2195,8 @@ def command_start_advice(arguments: argparse.Namespace) -> None:
             record["operation"],
             record["attempt"],
             cause,
+            registration=record,
+            candidate=product_manifest(Path(run["repository_root"]))["candidate_id"],
         )
     except advisory.AdvisoryError as exc:
         raise EvidenceError(str(exc)) from exc
@@ -2172,7 +2206,8 @@ def command_start_advice(arguments: argparse.Namespace) -> None:
     )
     if plan_id is not None:
         atomic_json(
-            arguments.run_dir / f"advice-plan-{record['attempt']}.json", {"plan_sha256": plan_id}
+            arguments.run_dir / f"advice-plan-{record['attempt']}.json",
+            {"plan_sha256": plan_id},
         )
     print("ADVICE LAUNCH RECORDED")
 
@@ -2233,7 +2268,12 @@ def command_ingest_advice(arguments: argparse.Namespace) -> None:
 
 def read_advice_source(source: Path) -> dict[str, Any]:
     result = subprocess.run(
-        [str(source / "tools/kickoff-evidence"), "advice-source", "--run-dir", str(source)],
+        [
+            str(source / "tools/kickoff-evidence"),
+            "advice-source",
+            "--run-dir",
+            str(source),
+        ],
         capture_output=True,
         text=True,
         check=False,
@@ -2331,10 +2371,40 @@ def validate_primary_acceptance(run_dir: Path, run: dict[str, Any]) -> None:
         ]
         if dispatch["accepted"] and len(claimed) != 1:
             raise EvidenceError("advisory dispatch lacks one phase-bound launch claim")
-    for operation in REVIEW_OPERATIONS:
-        matching = [r for r in starts if r["operation"] == operation]
-        if len(matching) > 2 or any(r["pass"] == 2 and not r["cause"].strip() for r in matching):
-            raise EvidenceError("advisory pass budget or second-pass cause violated")
+    try:
+        budget = advisory.budget_path(Path(run["repository_root"]), run["phase"])
+        advisory.validate_budget(
+            Path(run["repository_root"]),
+            run["phase"],
+            budget.read_text() if budget.exists() else "",
+        )
+    except advisory.AdvisoryError as exc:
+        raise EvidenceError(str(exc)) from exc
+    for claim in starts:
+        if "exception_sha256" not in claim:
+            continue
+        origin = Path(claim["run"])
+        registrations = [
+            r
+            for r in load_jsonl(origin / "role-attempts.jsonl")
+            if r["operation"] == claim["operation"] and r["attempt"] == claim["attempt"]
+        ]
+        if (
+            len(registrations) != 1
+            or advisory.digest(registrations[0]) != claim["registration_sha256"]
+        ):
+            raise EvidenceError("exception registration differs from admitted claim")
+        for dispatch in load_role_dispatches(origin):
+            if (
+                dispatch["accepted"]
+                and dispatch["operation"] == claim["operation"]
+                and dispatch["attempt"] == claim["attempt"]
+                and (
+                    claim["candidate_id"] != dispatch["dispatch_candidate_id"]
+                    or claim["candidate_id"] != dispatch["return_candidate_id"]
+                )
+            ):
+                raise EvidenceError("exception candidate differs from independent dispatch")
     for report in reports:
         if report["kind"] == "plan":
             plan_id = validate_candidate_id(report.get("plan_sha256"), "advised plan identity")
@@ -4832,7 +4902,10 @@ def _append_failure_once(path: Path, record: dict[str, Any]) -> None:
 
 
 def _validate_phase_close(
-    root: Path, phase: str, ledger: Path | None = None, next_marker_reason: str | None = None
+    root: Path,
+    phase: str,
+    ledger: Path | None = None,
+    next_marker_reason: str | None = None,
 ) -> None:
     checker = root / "bin" / "check-catalogs"
     process = subprocess.run(
@@ -5181,6 +5254,12 @@ def build_parser() -> argparse.ArgumentParser:
     add_run_dir(carry)
     carry.add_argument("--source-run", type=Path, required=True)
     carry.set_defaults(handler=command_carry_advice)
+    exception = subparsers.add_parser("grant-advice-exception")
+    add_run_dir(exception)
+    exception.add_argument("--registration", type=Path, required=True)
+    exception.add_argument("--owner-evidence", type=Path, required=True)
+    exception.add_argument("--scope", required=True)
+    exception.set_defaults(handler=command_grant_advice_exception)
     start_advice = subparsers.add_parser("start-advice")
     add_run_dir(start_advice)
     start_advice.add_argument("--registration", type=Path, required=True)

@@ -20,7 +20,7 @@ TREE_ID = ROOT / "bin" / "kickoff-tree-id"
 UV = shutil.which("uv")
 assert UV is not None
 sys.path.insert(0, str(ROOT / "lib"))
-from agentic_starter import workflow  # noqa: E402
+from agentic_starter import advisory, workflow  # noqa: E402
 from agentic_starter.execution_telemetry import (  # noqa: E402
     attach_review_metrics,
     closed_span,
@@ -925,6 +925,7 @@ def _assert_complete_synthetic_kickoff(
     parent_run: Path | None = None,
     primary: bool = False,
     thorough: bool = False,
+    owner_exception: bool = False,
 ) -> Path | None:
     """Drive one synthetic phase through the real evidence tool.
 
@@ -1027,7 +1028,9 @@ def _assert_complete_synthetic_kickoff(
     run_dir = tmp_path / "run"
     receipt = tmp_path / "preflight.json"
     write_fixture_receipt(
-        receipt, mode="primary" if primary else "delegated", executable=tmp_path / "claude"
+        receipt,
+        mode="primary" if primary else "delegated",
+        executable=tmp_path / "claude",
     )
     initialized = run(
         "init",
@@ -1164,6 +1167,14 @@ def _assert_complete_synthetic_kickoff(
             artifact = tmp_path / f"{operation}-{attempt}-artifact.txt"
             populate = "" if harness == "claude" else f"printf '%s' 'CODEX' > {artifact}\n"
             answer_version = "[ \"$1\" = --version ] && echo 'stub 1.0' && exit 0\n"
+            if owner_exception and role == "critic" and attempt == 3:
+                version_marker = tmp_path / "versions-seen"
+                answer_version = (
+                    '[ "$1" = --version ] && { '
+                    f'if [ -f "{version_marker}" ]; then rm "$0"; '
+                    f'else touch "{version_marker}"; fi; '
+                    "echo 'stub 1.0'; exit 0; }\n"
+                )
             executable.write_text(
                 f"#!/bin/sh\n{answer_version}printf '%s\\n' '{event}'\n{populate}exit {exit_code}\n"
             )
@@ -1200,6 +1211,29 @@ def _assert_complete_synthetic_kickoff(
                 "--telemetry-role-registration",
                 str(handoff),
             ]
+            if owner_exception and role == "critic" and attempt in {3, 4}:
+                evidence = tmp_path / "owner-evidence.json"
+                evidence.write_text(
+                    json.dumps(
+                        {
+                            "source": "fixture operator conversation",
+                            "reference": "fixture-owner-request",
+                            "statement": "Permit one extra review of VALUE = 2.",
+                        }
+                    )
+                )
+                granted = run(
+                    "grant-advice-exception",
+                    "--run-dir",
+                    str(run_dir),
+                    "--registration",
+                    str(handoff),
+                    "--owner-evidence",
+                    str(evidence),
+                    "--scope",
+                    "Review the exact VALUE = 2 correction once",
+                )
+                assert granted.returncode == 0, granted.stderr
             if primary and attempt == 1:
                 # A different install of the venue than preflight proved is
                 # refused before anything is claimed, so it costs no pass.
@@ -1224,7 +1258,10 @@ def _assert_complete_synthetic_kickoff(
                 replaced = subprocess.run(
                     watcher_arguments,
                     cwd=repository,
-                    env={**os.environ, f"KICKOFF_CLI_{harness.upper()}": str(executable)},
+                    env={
+                        **os.environ,
+                        f"KICKOFF_CLI_{harness.upper()}": str(executable),
+                    },
                     capture_output=True,
                     text=True,
                     check=False,
@@ -1244,8 +1281,24 @@ def _assert_complete_synthetic_kickoff(
                 text=True,
                 check=False,
             )
-            if primary and attempt == 3:
+            if primary and (
+                (owner_exception and attempt == 5) or (attempt == 3 and not owner_exception)
+            ):
                 assert watched.returncode != 0 and "maximum two" in watched.stderr, watched.stderr
+            elif owner_exception and attempt == 3:
+                assert watched.returncode != 0 and "No such file or directory" in watched.stderr, (
+                    watched.stderr
+                )
+                assert (
+                    len(
+                        [
+                            r
+                            for r in advisory.launches(repository, phase)
+                            if r["operation"] == "role.code-review"
+                        ]
+                    )
+                    == 2
+                )
             else:
                 assert watched.returncode == exit_code, watched.stderr
             return
@@ -1318,6 +1371,9 @@ def _assert_complete_synthetic_kickoff(
         role_attempt("role.code-review", "critic", "claude", 1, "initial", model="opus")
         role_attempt("role.code-review", "critic", "claude", 2, "revision", model="opus")
         role_attempt("role.code-review", "critic", "claude", 3, "revision", model="opus")
+        if owner_exception:
+            role_attempt("role.code-review", "critic", "claude", 4, "revision", model="opus")
+            role_attempt("role.code-review", "critic", "claude", 5, "revision", model="opus")
     elif not thorough:
         role_attempt("role.plan", "planner", "native", 1, "initial")
         role_attempt("role.plan-review", "reviewer", "native", 1, "initial")
@@ -1374,8 +1430,8 @@ def _assert_complete_synthetic_kickoff(
         if dispatch.get("state") != "opened"
     ]
     if primary:
-        assert len(dispatches) == 4
-        assert sum(d["accepted"] for d in dispatches) == 3
+        assert len(dispatches) == (6 if owner_exception else 4)
+        assert sum(d["accepted"] for d in dispatches) == (4 if owner_exception else 3)
         assert {d["operation"] for d in dispatches} == {
             "role.plan-review",
             "role.code-review",
@@ -1415,11 +1471,41 @@ def _assert_complete_synthetic_kickoff(
                             "reason": "Requirement specifies a constant; no service needed.",
                             "verification": "",
                         }
-                        for identifier in ("plan-1", "code-1", "code-2")
+                        for identifier in (
+                            ["plan-1", "code-1", "code-2", "code-3"]
+                            if owner_exception
+                            else ["plan-1", "code-1", "code-2"]
+                        )
                     ],
                 }
             )
         )
+        if owner_exception:
+            budget = advisory.budget_path(repository, phase)
+            clean_budget = budget.read_bytes()
+            rows = [json.loads(line) for line in clean_budget.decode().splitlines()]
+            permit = next(row for row in rows if "exception" in row)
+            permit["exception"]["owner_evidence"]["statement"] = "Tampered approval"
+            budget.write_text("".join(json.dumps(row, sort_keys=True) + "\n" for row in rows))
+            refused = run("accept-primary", "--run-dir", str(run_dir), "--input", str(decision))
+            assert refused.returncode != 0 and "receipt digest mismatch" in refused.stderr, (
+                refused.stderr
+            )
+            budget.write_bytes(clean_budget)
+            registration_path = run_dir / "role-attempts.jsonl"
+            clean_registrations = registration_path.read_bytes()
+            registrations = [json.loads(line) for line in clean_registrations.decode().splitlines()]
+            next(r for r in registrations if r["role"] == "critic" and r["attempt"] == 4)[
+                "registered_at"
+            ] = "changed"
+            registration_path.write_text(
+                "".join(json.dumps(row, sort_keys=True) + "\n" for row in registrations)
+            )
+            refused = run("accept-primary", "--run-dir", str(run_dir), "--input", str(decision))
+            assert refused.returncode != 0 and "exception registration differs" in refused.stderr, (
+                refused.stderr
+            )
+            registration_path.write_bytes(clean_registrations)
         accepted = run("accept-primary", "--run-dir", str(run_dir), "--input", str(decision))
         assert accepted.returncode == 0, accepted.stderr
         saved = (run_dir / "primary-decision.json").read_bytes()
@@ -1434,7 +1520,7 @@ def _assert_complete_synthetic_kickoff(
         carried = run("carry-advice", "--run-dir", str(continuation), "--source-run", str(run_dir))
         assert carried.returncode == 0, carried.stderr
         carried_rows = json.loads((continuation / "advisory-reports.json").read_text())
-        assert len(carried_rows) == 3 and all(
+        assert len(carried_rows) == (4 if owner_exception else 3) and all(
             r["source_run"] == str(run_dir.resolve()) for r in carried_rows
         )
         decision_again = run(
@@ -1596,8 +1682,8 @@ def _assert_complete_synthetic_kickoff(
         projection = json.loads(json_summary.stdout)
         if primary:
             assert projection["authority_mode"] == "primary"
-            assert projection["advisory_reports"] == 3
-            assert len(projection["primary_dispositions"]) == 3
+            assert projection["advisory_reports"] == (4 if owner_exception else 3)
+            assert len(projection["primary_dispositions"]) == (4 if owner_exception else 3)
         else:
             assert projection["retry_ns"] > 0
             assert projection["failed_ns"] > 0
@@ -1701,7 +1787,8 @@ def _assert_complete_synthetic_kickoff(
         (run_dir / "closure.json").unlink()
         ledger_after.write_bytes(
             stranded.replace(
-                "Unrelated later work | ⬅️".encode(), "Unrelated later work | ⏳".encode()
+                "Unrelated later work | ⬅️".encode(),
+                "Unrelated later work | ⏳".encode(),
             )
         )
         refused_unpaired = run(*close_arguments)
@@ -2123,3 +2210,157 @@ def _assert_bookkeeping_review_custody(repository: Path, tmp_path: Path) -> None
     refused_authority = run("validate", "--run-dir", str(authority_dir))
     assert refused_authority.returncode == 2
     assert "reviewed bookkeeping changed" in refused_authority.stderr
+
+
+def test_owner_exception_uses_pinned_watcher_and_acceptance(
+    repository: Path, tmp_path: Path
+) -> None:
+    """One extra independent launch completes the real primary evidence lifecycle."""
+    _assert_complete_synthetic_kickoff(
+        repository,
+        tmp_path / "exception",
+        phase="1",
+        primary=True,
+        owner_exception=True,
+    )
+
+
+def test_owner_exception_budget_is_scoped_atomic_and_auditable(tmp_path: Path) -> None:
+    """The actual shared ledger boundary guards one launch, including recovery."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    root = tmp_path / "repo"
+    root.mkdir()
+    run_dir = tmp_path / "run"
+    operation = "role.code-review"
+    evidence = {
+        "source": "fixture authenticated operator channel",
+        "reference": "fixture request",
+        "statement": "One extra independent review of this exact correction.",
+    }
+    registration = {"operation": operation, "attempt": 3}
+    for attempt in (1, 2):
+        advisory.start(
+            root,
+            "1",
+            run_dir,
+            operation,
+            attempt,
+            "Initial review" if attempt == 1 else "Concrete correction",
+        )
+    ledger = advisory.budget_path(root, "1")
+    original = ledger.read_bytes()
+    with pytest.raises(advisory.AdvisoryError, match="maximum two"):
+        advisory.start(root, "1", run_dir, operation, 3, "Another correction")
+    for bad in ({}, {**evidence, "statement": ""}):
+        with pytest.raises(advisory.AdvisoryError, match="owner evidence"):
+            advisory.grant_exception(root, "1", run_dir, registration, "a" * 64, "Exact fix", bad)
+    permit = advisory.grant_exception(
+        root, "1", run_dir, registration, "a" * 64, "Exact fix", evidence
+    )
+    prefix = ledger.read_bytes()
+    assert prefix.startswith(original)
+    with pytest.raises(advisory.AdvisoryError, match="pending or consumed"):
+        advisory.grant_exception(root, "1", run_dir, registration, "a" * 64, "Exact fix", evidence)
+    for candidate, target, record in [
+        ("b" * 64, run_dir, registration),
+        ("a" * 64, tmp_path / "other", registration),
+        ("a" * 64, run_dir, {**registration, "attempt": 4}),
+        ("a" * 64, run_dir, {**registration, "operation": "role.plan-review"}),
+    ]:
+        with pytest.raises(advisory.AdvisoryError, match="maximum two"):
+            advisory.start(
+                root,
+                "1",
+                target,
+                operation,
+                3,
+                "Exact fix",
+                registration=record,
+                candidate=candidate,
+            )
+    for field, value in [
+        ("phase", "2"),
+        ("repository", str(tmp_path / "elsewhere")),
+        ("operation", "role.plan-review"),
+        ("prefix_sha256", "b" * 64),
+        ("owner_evidence", {}),
+    ]:
+        rows = [json.loads(line) for line in prefix.decode().splitlines()]
+        rows[-1]["exception"][field] = value
+        # Keep the content digest honest: scope/prefix validation must reject independently.
+        rows[-1]["exception_sha256"] = advisory.digest(rows[-1]["exception"])
+        text = "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows)
+        with pytest.raises(advisory.AdvisoryError, match="exception"):
+            advisory.validate_budget(root, "1", text)
+
+    def launch() -> dict:
+        return advisory.start(
+            root,
+            "1",
+            run_dir,
+            operation,
+            3,
+            "Exact fix",
+            registration=registration,
+            candidate="a" * 64,
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(launch) for _ in range(2)]
+        outcomes = []
+        for future in futures:
+            try:
+                outcomes.append(future.result())
+            except advisory.AdvisoryError as error:
+                assert "already launched" in str(error)
+    assert len(outcomes) == 1
+    claim = outcomes[0]
+    assert claim["exception_sha256"] == permit and claim["pass"] == 3
+    # This is the watcher's existing no-child cancellation, never a launched failure.
+    advisory.cancel_unstarted(root, "1", claim)
+    assert len(advisory.launches(root, "1")) == 2
+    with pytest.raises(advisory.AdvisoryError, match="retry changed"):
+        advisory.grant_exception(root, "1", run_dir, registration, "b" * 64, "Exact fix", evidence)
+    replacement = {**registration, "attempt": 4}
+    advisory.grant_exception(root, "1", run_dir, replacement, "a" * 64, "Exact fix", evidence)
+    launched = advisory.start(
+        root,
+        "1",
+        run_dir,
+        operation,
+        4,
+        "Retry unstarted child",
+        registration=replacement,
+        candidate="a" * 64,
+    )
+    assert launched["pass"] == 3 and ledger.read_bytes().startswith(prefix)
+    # Any real child, including an error/timeout, remains charged unless watcher reports no child.
+    with pytest.raises(advisory.AdvisoryError, match="prefix mismatch"):
+        advisory.grant_exception(
+            root,
+            "1",
+            run_dir,
+            {**replacement, "attempt": 5},
+            "a" * 64,
+            "Exact fix",
+            evidence,
+        )
+    with pytest.raises(advisory.AdvisoryError, match="maximum two"):
+        advisory.start(
+            root,
+            "1",
+            run_dir,
+            operation,
+            5,
+            "Fourth pass",
+            registration=replacement,
+            candidate="a" * 64,
+        )
+    rows = advisory.validate_budget(root, "1", ledger.read_text())
+    assert len(advisory.active_launches(rows)) == 3
+    rows[-1]["candidate_id"] = "b" * 64
+    with pytest.raises(advisory.AdvisoryError, match="mismatched"):
+        advisory.validate_budget(
+            root, "1", "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows)
+        )

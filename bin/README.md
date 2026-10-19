@@ -674,6 +674,8 @@ Scans every tracked file, and every new file not yet staged, for the two *mechan
 
 Starter-only: this script enforces [`policies/anonymize-log-references.md`](../policies/anonymize-log-references.md), which exists because *this* template repo is public. `stamp` and `teach` do not transfer it — a private downstream project has nothing to anonymize against itself. The `bin/` convention and the triage policy above **are** universal and do propagate.
 
+The pinned `grant-advice-exception` subcommand records an already verified User instruction for exactly one additional code review. It binds the current candidate, scope, run/registration and original two-claim prefix; it is not a generic limit override or an authentication surface. See [single-use owner exception](../policies/orchestration-evidence.md#single-use-owner-exception) for evidence fields, cancellation/rebinding and custody requirements.
+
 ## Primary authority and advisory evidence
 
 `kickoff-config show workflow` explains inline ownership, independent advisers and fallback routing. `set-workflow --file <json>` atomically installs a complete workflow configuration; `preflight` applies optional usage limits before model probes and freezes the resolved route. Presets select the delegated workflow explicitly.

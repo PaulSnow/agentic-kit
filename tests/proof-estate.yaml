@@ -265,6 +265,7 @@ families:
   source_paths: &id013
   - bin/kickoff-evidence
   - lib/agentic_starter/finding_schema.py
+  - lib/agentic_starter/advisory.py
   - tests/test_kickoff_evidence.py
   - policies/orchestration-evidence.md
   - briefs/incremental-orchestration.md
