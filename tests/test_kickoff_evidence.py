@@ -298,6 +298,266 @@ def initialize(
     return result.stdout.strip()
 
 
+@pytest.fixture
+def advisory_continuation(repository: Path, tmp_path: Path, request):
+    """Two actual pinned watcher dispatches, split across primary runs."""
+    executable = tmp_path / "claude"
+    report = {"summary": "Bounded fixture review", "findings": []}
+    event = json.dumps({"type": "result", "result": json.dumps(report)})
+    executable.write_text(
+        "#!/bin/sh\n[ \"$1\" = --version ] && echo 'stub 1.0' && exit 0\n"
+        f"printf '%s\\n' '{event}'\n"
+    )
+    executable.chmod(0o755)
+    first, second, target = (tmp_path / name for name in ("first", "second", "target"))
+    for directory in (first, second, target):
+        initialize(repository, directory, mode="primary")
+        write_fixture_receipt(
+            directory / "role-preflight.json", mode="primary", executable=executable
+        )
+
+    def review(directory: Path, attempt: int):
+        plan = tmp_path / f"plan-{attempt}.md"
+        plan.write_text(f"# Plan\n\nCheck constant VALUE = 1, pass {attempt}.\n")
+        captured = run("capture-plan", "--run-dir", str(directory), "--plan", str(plan))
+        assert captured.returncode == 0, captured.stderr
+        registration = directory / f"review-{attempt}.json"
+        registered = run(
+            "register-role-attempt",
+            "--run-dir",
+            str(directory),
+            "--operation",
+            "role.plan-review",
+            "--attempt",
+            str(attempt),
+            "--role",
+            "reviewer",
+            "--harness",
+            "claude",
+            "--model",
+            "opus",
+            "--reason",
+            "initial" if attempt == 1 else "revision",
+            "--cause",
+            "Review the concrete corrected plan",
+            "--output",
+            str(registration),
+        )
+        assert registered.returncode == 0, registered.stderr
+        artifact = tmp_path / f"report-{attempt}.json"
+        watched = subprocess.run(
+            [
+                str(directory / "tools/kickoff-config"),
+                "watch",
+                "--role",
+                "reviewer",
+                "--venue",
+                "claude",
+                "--model",
+                "opus",
+                "--effort",
+                "default",
+                "--phase",
+                "1.1",
+                "--prompt-file",
+                str(plan),
+                "--result-file",
+                str(artifact),
+                "--first-event-timeout",
+                "2",
+                "--idle-timeout",
+                "2",
+                "--hard-timeout",
+                "4",
+                "--telemetry-role-registration",
+                str(registration),
+            ],
+            cwd=repository,
+            env={
+                **os.environ,
+                "KICKOFF_CLI_CLAUDE": str(executable),
+                "KICKOFF_CONFIG_FILE": str(directory / "fixture-config.yaml"),
+            },
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=15,
+        )
+        assert watched.returncode == 0, watched.stderr
+        dispatch = [
+            json.loads(line)
+            for line in (directory / "role-dispatch.jsonl").read_text().splitlines()
+        ][-1]
+        ingested = run(
+            "ingest-findings",
+            "--run-dir",
+            str(directory),
+            "--kind",
+            "plan",
+            "--artifact",
+            str(artifact),
+            "--candidate",
+            dispatch["dispatch_candidate_id"],
+            "--review-span-id",
+            dispatch["intelligence_span_id"],
+        )
+        assert ingested.returncode == 0, ingested.stderr
+
+    review(first, 1)
+    carried = run("carry-advice", "--run-dir", str(second), "--source-run", str(first))
+    assert carried.returncode == 0, carried.stderr
+    review(second, getattr(request, "param", 2))
+    return repository, first, second, target
+
+
+@pytest.mark.parametrize("advisory_continuation", [1, 2], indirect=True)
+def test_primary_continuation_carries_original_predecessors(advisory_continuation, tmp_path):
+    repository, first, second, target = advisory_continuation
+    budget = advisory.budget_path(repository, "1.1")
+    saved_budget = budget.read_bytes()
+    registration = json.loads((second / "role-attempts.jsonl").read_text())
+    if registration["attempt"] == 2:
+        # Model an authentic old snapshot in this disposable fixture: its
+        # manifest binds the old local-only guard. Fixing the target alone
+        # cannot repair the source executable that carry actually invokes.
+        tool = second / "tools/kickoff-evidence"
+        old = tool.read_text().replace(
+            "    validate_role_continuity(run_dir, run, by_operation)",
+            "    for operation, attempts in by_operation.items():\n"
+            "        if sorted(attempts) != list(range(1, max(attempts) + 1)):\n"
+            '            raise EvidenceError(f"role attempts are not contiguous for {operation}")',
+        )
+        tool.write_text(old)
+        manifest_path = second / "tools/manifest.json"
+        manifest = json.loads(manifest_path.read_text())
+        for entry in manifest["files"]:
+            if entry["path"] == "kickoff-evidence":
+                entry["sha256"] = hashlib.sha256(tool.read_bytes()).hexdigest()
+        manifest_path.write_text(json.dumps(manifest))
+        metadata = json.loads((second / "run.json").read_text())
+        metadata["tool_bundle"]["manifest_sha256"] = hashlib.sha256(
+            manifest_path.read_bytes()
+        ).hexdigest()
+        (second / "run.json").write_text(json.dumps(metadata))
+        archive = tmp_path / "old-source-archive"
+        shutil.copytree(second / "tools", archive / "tools")
+        shutil.copy2(second / "run.json", archive / "run.json")
+        refused = run("carry-advice", "--run-dir", str(target), "--source-run", str(second))
+        assert refused.returncode == 2 and "not contiguous" in refused.stderr, refused.stderr
+        immutable = {
+            name: (second / name).read_bytes()
+            for name in ("role-attempts.jsonl", "role-dispatch.jsonl", "advisory-reports.json")
+        }
+        repinned = subprocess.run(
+            [str(EVIDENCE), "repin-tools", "--run-dir", str(second)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert repinned.returncode == 0, repinned.stderr
+        assert all((second / name).read_bytes() == body for name, body in immutable.items()), (
+            "REPIN PRESERVES REVIEW RECORDS"
+        )
+    carried = run("carry-advice", "--run-dir", str(target), "--source-run", str(second))
+    assert carried.returncode == 0, f"CONTINUATION CARRY: {carried.stderr}"
+    reports = json.loads((target / "advisory-reports.json").read_text())
+    assert [(row["report_id"], row["source_run"]) for row in reports] == [
+        ("plan-1", str(first)),
+        ("plan-2", str(second)),
+    ], "ORIGINAL REPORT PROVENANCE"
+    assert budget.read_bytes() == saved_budget, "CARRY MUST NOT CHANGE BUDGET"
+    assert len((second / "role-attempts.jsonl").read_text().splitlines()) == 1
+    decision = tmp_path / "decision.json"
+    decision.write_text(
+        json.dumps(
+            {
+                "delta_assessment": "Both original reviews retained.",
+                "requirements_checked": "Constant unchanged; no new advice.",
+                "dispositions": [],
+            }
+        )
+    )
+    accepted = run("accept-primary", "--run-dir", str(target), "--input", str(decision))
+    assert accepted.returncode == 0, f"CONTINUATION ACCEPTANCE: {accepted.stderr}"
+    valid = run("validate", "--run-dir", str(target), "--level", "integrity")
+    assert valid.returncode == 0, valid.stderr
+
+
+def test_primary_continuation_refuses_unproved_predecessors(advisory_continuation):
+    repository, first, second, target = advisory_continuation
+    reports_path = second / "advisory-reports.json"
+    budget = advisory.budget_path(repository, "1.1")
+    saved = {
+        path: path.read_bytes()
+        for path in (
+            reports_path,
+            first / "run.json",
+            first / "role-dispatch.jsonl",
+            first / "role-attempts.jsonl",
+            first / "advisory-reports.json",
+            second / "role-attempts.jsonl",
+            budget,
+        )
+    }
+    target_before = (target / "advisory-reports.json").read_bytes()
+    failures = []
+    for case, expected in (
+        ("missing", "not contiguous"),
+        ("gap", "not contiguous"),
+        ("kind", "not contiguous"),
+        ("duplicate", "ambiguous advisory predecessor"),
+        ("report", "differs from its original"),
+        ("phase", "another work item"),
+        ("self", "own run"),
+        ("claim", "advisory pass sequence"),
+        ("dispatch", "span ids do not agree"),
+        ("cycle", "cyclic advisory source provenance"),
+    ):
+        reports = json.loads(saved[reports_path])
+        if case == "missing":
+            reports = reports[1:]
+        elif case == "gap":
+            rows = [json.loads(line) for line in saved[second / "role-attempts.jsonl"].splitlines()]
+            rows[0]["attempt"] = 3
+            (second / "role-attempts.jsonl").write_text(json.dumps(rows[0]) + "\n")
+        elif case == "kind":
+            reports[0]["kind"] = "code"
+        elif case == "duplicate":
+            reports.insert(0, reports[0].copy())
+        elif case == "report":
+            reports[0]["candidate_id"] = "f" * 64
+        elif case == "phase":
+            metadata = json.loads(saved[first / "run.json"])
+            metadata["phase"] = "another-phase"
+            (first / "run.json").write_text(json.dumps(metadata))
+        elif case == "self":
+            reports[0]["source_run"] = str(second)
+        elif case == "claim":
+            budget.write_bytes(b"\n".join(saved[budget].splitlines()[1:]) + b"\n")
+        elif case == "dispatch":
+            rows = [json.loads(line) for line in saved[first / "role-dispatch.jsonl"].splitlines()]
+            for row in rows:
+                row["intelligence_span_id"] = "f" * 32
+            (first / "role-dispatch.jsonl").write_text(
+                "".join(json.dumps(row) + "\n" for row in rows)
+            )
+        elif case == "cycle":
+            rows = [json.loads(line) for line in saved[first / "role-attempts.jsonl"].splitlines()]
+            rows[0]["attempt"] = 2
+            (first / "role-attempts.jsonl").write_text(json.dumps(rows[0]) + "\n")
+            (first / "advisory-reports.json").write_text(
+                json.dumps([{**reports[1], "source_run": str(second)}])
+            )
+        reports_path.write_text(json.dumps(reports))
+        result = run("advice-source", "--run-dir", str(second))
+        if result.returncode == 0 or expected not in result.stderr:
+            failures.append((case, result.returncode, result.stderr))
+        for path, body in saved.items():
+            path.write_bytes(body)
+    assert not failures, f"UNPROVED PREDECESSORS ACCEPTED: {failures}"
+    assert (target / "advisory-reports.json").read_bytes() == target_before
+
+
 def complete_orchestration(repository: Path, run_dir: Path) -> None:
     metadata = json.loads((run_dir / "run.json").read_text())
     trace_id = metadata["telemetry_trace_id"]
