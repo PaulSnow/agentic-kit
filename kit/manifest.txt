@@ -1,0 +1,19 @@
+# The pieces of Wolf's starter we adopt, as repo-relative paths, installed
+# verbatim by bin/kit-install. A directory installs whole. See KIT.md.
+
+# Saved third-party documents, and the lessons ledger
+policies/docs.md
+policies/lessons.md
+.claude/skills/rule-one
+
+# Policies we already follow, written down so every session reads them
+policies/verification-discipline.md
+policies/mechanistic-vs-intelligence.md
+policies/simplicity-and-consolidation.md
+
+# How reports to the operator are written
+.claude/skills/plain
+
+# Independent review, used advisory and same-provider (Fable reviewing Opus)
+.claude/agents/plan-reviewer.md
+.claude/agents/code-critic.md

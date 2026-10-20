@@ -14,6 +14,10 @@
 
 ## Scripts
 
+### `kit-install` — install the adopted pieces into another repository
+
+`./bin/kit-install [--dry-run] [--force] TARGET` copies every path in `kit/manifest.txt` verbatim to the same repo-relative path under `TARGET`, records the upstream commit in `TARGET/.kit-version`, and lists links in the installed files that do not resolve in the target. A target file with different bytes is refused unless `--force`. Exits 0 on install, 1 on refusal, 2 on usage. Fork-specific; see [KIT.md](../KIT.md).
+
 ### `docs` — build, review and publish the curated manual
 
 `./bin/docs setup` uses exact installed mdBook/admonish versions or installs locked tools under `.kickoff/docs-tools`; the compiler pin is explicit and global tools are unchanged. `./bin/docs` builds and opens the local book. `build` and `check` validate curated sources, generated links/anchors/assets and search/print. `serve` opens a foreground loopback preview; `--url` accepts an existing approved Tailnet proxy URL and creates no route. `deploy` requires the clean latest pushed configured release branch and an already approved Pages workflow; `deploy continuous on|off` changes the explicit push switch without removing manual deployment. `verify` probes the live site and private-path exclusions. A refusal exits nonzero; dispatch does not claim deployment completion or live/browser verification. See [software documentation](../policies/software-documentation.md) and [the manual](../manual/src/documentation.md).
