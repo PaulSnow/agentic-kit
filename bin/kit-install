@@ -3,9 +3,12 @@
 
 Copies each manifest path verbatim to the same repo-relative path under the
 target, records the upstream commit it came from in the target's
-`.kit-version`, and lists the Markdown links in the installed files that do not
-resolve in the target. Those are the cross-references to parts of the starter
-that were not adopted; the adopting repo decides whether to rewrite or drop them.
+`.kit-version`, and lists the references in the installed files that do not
+resolve in the target: Markdown links, resolved against the file, and paths
+named in prose, resolved against the repository root. A prose path counts only
+when it contains "/" or "." and names a file this checkout tracks. Those are the cross-references to
+parts of the starter that were not adopted; the adopting repo decides whether
+to rewrite or drop them.
 
 An existing target file with different bytes is never overwritten unless
 --force is given; the refusal names it. --dry-run reports without writing.
@@ -26,6 +29,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "kit" / "manifest.txt"
 LINK = re.compile(r"\]\(([^)#\s]+)")
+TOKEN = re.compile(r"[\w./-]+")
 
 
 def manifest_files() -> list[Path]:
@@ -42,6 +46,30 @@ def manifest_files() -> list[Path]:
         else:
             sys.exit(f"kit-install: manifest names a missing path: {line}")
     return files
+
+
+def tracked_files() -> set[str]:
+    out = subprocess.run(["git", "-C", str(ROOT), "ls-files"],
+                         capture_output=True, text=True, check=True)
+    return set(out.stdout.splitlines())
+
+
+def unresolved(src: Path, target: Path, installed: set[Path], tracked: set[str]) -> set[str]:
+    rel = src.relative_to(ROOT)
+    text = src.read_text(encoding="utf-8")
+    missing = set()
+    for link in LINK.findall(text):
+        if "://" in link or link.startswith("mailto:"):
+            continue
+        if not (target / rel.parent / link).resolve().exists() and \
+                (ROOT / rel.parent / link).resolve() not in installed:
+            missing.add(link)
+    for token in TOKEN.findall(text):
+        path = token.rstrip(".")
+        if ("/" in path or "." in path) and path in tracked and \
+                not (target / path).exists() and ROOT / path not in installed:
+            missing.add(path)
+    return missing
 
 
 def upstream_commit() -> str:
@@ -78,6 +106,8 @@ def main() -> int:
             print(f"  {c}", file=sys.stderr)
         return 1
 
+    installed = set(files)
+    tracked = tracked_files()
     dangling = []
     for src in files:
         rel = src.relative_to(ROOT)
@@ -87,12 +117,8 @@ def main() -> int:
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(src, dst)
         if src.suffix == ".md":
-            for link in LINK.findall(src.read_text(encoding="utf-8")):
-                if "://" in link or link.startswith("mailto:"):
-                    continue
-                if not (target / rel.parent / link).resolve().exists() and \
-                        not (ROOT / rel.parent / link).resolve() in files:
-                    dangling.append(f"{rel.as_posix()} -> {link}")
+            dangling += [f"{rel.as_posix()} -> {ref}"
+                         for ref in unresolved(src, target, installed, tracked)]
 
     stamp = f"agentic-kit {upstream_commit()}\n"
     if not a.dry_run:
@@ -100,7 +126,7 @@ def main() -> int:
     print(f"{'would record' if a.dry_run else 'recorded'} .kit-version: {stamp.strip()}")
     dangling = sorted(set(dangling))
     if dangling:
-        print(f"\n{len(dangling)} links do not resolve in the target:")
+        print(f"\n{len(dangling)} references do not resolve in the target:")
         for d in dangling:
             print(f"  {d}")
     return 0

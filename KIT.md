@@ -41,12 +41,13 @@ Installed separately, never vendored:
 ## Installing into a repository
 
 ```bash
-./bin/kit-install --dry-run ~/repos/github.com/PaulSnow/<repo>   # what would be copied, and which links dangle
+./bin/kit-install --dry-run ~/repos/github.com/PaulSnow/<repo>   # what would be copied, and which references dangle
 ./bin/kit-install ~/repos/github.com/PaulSnow/<repo>
 ```
 
 Files land at the same repo-relative paths. The target's `.kit-version` records the upstream commit they came
-from. The adopted files link to parts of the starter that were not adopted, and the installer lists those links.
+from. The adopted files refer to parts of the starter that were not adopted, by Markdown link or by a path in prose,
+and the installer lists those references.
 The adopting repository rewrites or drops them; it does not pull in the rest of the kit to satisfy them. A target
 file that already differs is not overwritten without `--force`.
 
@@ -59,3 +60,14 @@ git diff <old>..upstream/master -- $(grep -v '^#' kit/manifest.txt)   # what cha
 
 After a merge that changes an adopted piece, re-run `kit-install` into each adopting repository and review its diff
 there.
+
+## Testing the installer
+
+```bash
+./bin/test kit/tests
+```
+
+The kit's tests live in `kit/tests/`, outside Wolf's governed proof estate, so they add nothing to his ledgers and
+`./bin/check all` does not run them. Run them after every upstream merge. `kit/tests/references.txt` is the reviewed
+list of references that do not resolve in a fresh target; a merge that adds or drops one fails the test until the
+list is reviewed and updated.

@@ -16,7 +16,7 @@
 
 ### `kit-install` — install the adopted pieces into another repository
 
-`./bin/kit-install [--dry-run] [--force] TARGET` copies every path in `kit/manifest.txt` verbatim to the same repo-relative path under `TARGET`, records the upstream commit in `TARGET/.kit-version`, and lists links in the installed files that do not resolve in the target. A target file with different bytes is refused unless `--force`. Exits 0 on install, 1 on refusal, 2 on usage. Fork-specific; see [KIT.md](../KIT.md).
+`./bin/kit-install [--dry-run] [--force] TARGET` copies every path in `kit/manifest.txt` verbatim to the same repo-relative path under `TARGET`, records the upstream commit in `TARGET/.kit-version`, and lists references in the installed files (Markdown links and tracked paths named in prose) that do not resolve in the target. A target file with different bytes is refused unless `--force`. Exits 0 on install, 1 on refusal, 2 on usage. Fork-specific; see [KIT.md](../KIT.md).
 
 ### `docs` — build, review and publish the curated manual
 

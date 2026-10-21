@@ -10,6 +10,8 @@ active:
   - "/CLAUDE.md"
   - "/LICENSE"
   - "/README.md"
+  - "/KIT.md"
+  - "/kit/**"
   - "/documentation.toml"
   - "/manual/**"
   - "/kickoff.yaml"
