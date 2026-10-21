@@ -1,0 +1,183 @@
+#!/usr/bin/env python3
+"""Total the tokens Claude Code spent on one repository, from its session transcripts.
+
+Reads every transcript Claude Code wrote for sessions run inside REPO (default:
+the current directory), including subagent transcripts, and sums the `usage`
+block of each model reply. A reply is written as several transcript lines that
+repeat the same usage, so each reply is counted once, by message id.
+
+Columns: `input` is fresh input, `cache_write` and `cache_read` are prompt-cache
+input, `output` includes thinking, and `thinking` is the part of output spent
+thinking. Rows are grouped by session, by role (`main` for the session itself,
+otherwise the subagent's type) and by model; `--by` picks the grouping.
+
+Usage: token-report [--repo DIR] [--since T] [--until T] [--session ID]
+                    [--by session|role|model] [--json] [--projects-root DIR]
+T is an ISO-8601 date or time, compared in UTC; --until is exclusive.
+Exit: 0 report printed (possibly empty); 2 usage error.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import sys
+from collections import defaultdict
+from datetime import datetime, timezone
+from pathlib import Path
+
+FIELDS = ("input", "cache_write", "cache_read", "output", "thinking")
+
+
+def parse_time(value: str) -> datetime:
+    moment = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
+
+
+def within(path: str | None, repo: Path) -> bool:
+    if not path:
+        return False
+    cwd = Path(path)
+    return cwd == repo or repo in cwd.parents
+
+
+def transcripts(projects_root: Path, repo: Path) -> list[tuple[Path, str]]:
+    """Each candidate transcript with its role; lines are filtered by cwd later."""
+    encoded = re.sub(r"[^A-Za-z0-9]", "-", str(repo))
+    found = []
+    for project in sorted(projects_root.glob("*")):
+        if not project.is_dir() or not project.name.startswith(encoded):
+            continue
+        for path in sorted(project.glob("*.jsonl")):
+            found.append((path, "main"))
+        for path in sorted(project.glob("*/subagents/*.jsonl")):
+            meta = path.with_suffix(".meta.json")
+            role = "subagent"
+            if meta.is_file():
+                role = (
+                    json.loads(meta.read_text(encoding="utf-8")).get("agentType")
+                    or role
+                )
+            found.append((path, role))
+    return found
+
+
+def replies(path: Path, role: str, repo: Path) -> dict[str, dict]:
+    seen: dict[str, dict] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        message = record.get("message")
+        if not isinstance(message, dict) or not isinstance(message.get("usage"), dict):
+            continue
+        if not within(record.get("cwd"), repo) or message.get("model") == "<synthetic>":
+            continue
+        key = message.get("id") or record.get("requestId") or record.get("uuid")
+        usage = message["usage"]
+        seen[key] = {
+            "session": record.get("sessionId", path.stem),
+            "role": role,
+            "model": message.get("model", "unknown"),
+            "time": parse_time(record["timestamp"])
+            if record.get("timestamp")
+            else None,
+            "input": usage.get("input_tokens", 0),
+            "cache_write": usage.get("cache_creation_input_tokens", 0),
+            "cache_read": usage.get("cache_read_input_tokens", 0),
+            "output": usage.get("output_tokens", 0),
+            "thinking": (usage.get("output_tokens_details") or {}).get(
+                "thinking_tokens", 0
+            ),
+        }
+    return seen
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--repo", type=Path, default=Path.cwd())
+    ap.add_argument("--since")
+    ap.add_argument("--until")
+    ap.add_argument("--session")
+    ap.add_argument("--by", choices=("session", "role", "model"), default="session")
+    ap.add_argument("--json", action="store_true")
+    ap.add_argument(
+        "--projects-root", type=Path, default=Path.home() / ".claude" / "projects"
+    )
+    a = ap.parse_args()
+    try:
+        since = parse_time(a.since) if a.since else None
+        until = parse_time(a.until) if a.until else None
+    except ValueError as exc:
+        print(f"token-report: bad time: {exc}", file=sys.stderr)
+        return 2
+    repo = a.repo.resolve()
+
+    counted: dict[str, dict] = {}
+    for path, role in transcripts(a.projects_root, repo):
+        counted.update(replies(path, role, repo))
+
+    groups: dict[tuple, dict] = defaultdict(
+        lambda: dict.fromkeys(FIELDS + ("replies",), 0)
+    )
+    for reply in counted.values():
+        if a.session and reply["session"] != a.session:
+            continue
+        if (since or until) and reply["time"] is None:
+            continue
+        if since and reply["time"] < since or until and reply["time"] >= until:
+            continue
+        key = {
+            "session": (reply["session"], reply["role"], reply["model"]),
+            "role": (reply["role"], reply["model"]),
+            "model": (reply["model"],),
+        }[a.by]
+        for field in FIELDS:
+            groups[key][field] += reply[field]
+        groups[key]["replies"] += 1
+
+    headers = {
+        "session": ("session", "role", "model"),
+        "role": ("role", "model"),
+        "model": ("model",),
+    }[a.by]
+    rows = [dict(zip(headers, key)) | totals for key, totals in sorted(groups.items())]
+    total = {field: sum(row[field] for row in rows) for field in FIELDS + ("replies",)}
+    if a.json:
+        print(
+            json.dumps(
+                {"repo": str(repo), "by": a.by, "rows": rows, "total": total}, indent=2
+            )
+        )
+        return 0
+
+    columns = headers + FIELDS + ("replies",)
+    table = [
+        [str(row[c]) if c in headers else f"{row[c]:,}" for c in columns]
+        for row in rows
+    ]
+    table.append(
+        ["total"]
+        + [""] * (len(headers) - 1)
+        + [f"{total[c]:,}" for c in FIELDS + ("replies",)]
+    )
+    widths = [max(len(c), *(len(r[i]) for r in table)) for i, c in enumerate(columns)]
+    print(
+        "  ".join(
+            c.ljust(w) if c in headers else c.rjust(w) for c, w in zip(columns, widths)
+        )
+    )
+    for r in table:
+        print(
+            "  ".join(
+                v.ljust(w) if c in headers else v.rjust(w)
+                for c, v, w in zip(columns, r, widths)
+            )
+        )
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

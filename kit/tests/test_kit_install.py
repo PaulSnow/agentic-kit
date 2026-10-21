@@ -83,7 +83,9 @@ def test_installs_manifest_paths_verbatim_and_records_commit(tmp_path: Path) -> 
         assert (target / rel).read_bytes() == (kit / rel).read_bytes()
     assert not (target / "policies" / "left.md").exists()
     head = git(kit, "log", "-1", "--format=%H %cs").strip()
-    assert (target / ".kit-version").read_text(encoding="utf-8") == f"agentic-kit {head}\n"
+    assert (target / ".kit-version").read_text(
+        encoding="utf-8"
+    ) == f"agentic-kit {head}\n"
 
 
 def test_reports_unresolved_links_and_prose_paths(tmp_path: Path) -> None:
@@ -116,13 +118,17 @@ def test_reference_resolves_once_target_has_it(tmp_path: Path) -> None:
 def test_dry_run_writes_nothing(tmp_path: Path) -> None:
     kit = make_kit(tmp_path, MANIFEST)
     target = init_repo(tmp_path / "target")
-    before = sorted(p.relative_to(target) for p in target.rglob("*") if ".git" not in p.parts)
+    before = sorted(
+        p.relative_to(target) for p in target.rglob("*") if ".git" not in p.parts
+    )
 
     result = run(kit, "--dry-run", str(target))
 
     assert result.returncode == 0, result.stderr
     assert "would install policies/adopted.md" in result.stdout
-    after = sorted(p.relative_to(target) for p in target.rglob("*") if ".git" not in p.parts)
+    after = sorted(
+        p.relative_to(target) for p in target.rglob("*") if ".git" not in p.parts
+    )
     assert after == before
 
 
@@ -130,7 +136,10 @@ def test_refuses_differing_file_unless_forced(tmp_path: Path) -> None:
     kit = make_kit(tmp_path, MANIFEST)
     target = init_repo(tmp_path / "target")
     write(target / "policies" / "kept.md", "local edit\n")
-    write(target / "policies" / "adopted.md", (kit / "policies" / "adopted.md").read_text())
+    write(
+        target / "policies" / "adopted.md",
+        (kit / "policies" / "adopted.md").read_text(),
+    )
 
     refused = run(kit, str(target))
 

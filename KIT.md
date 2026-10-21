@@ -61,13 +61,27 @@ git diff <old>..upstream/master -- $(grep -v '^#' kit/manifest.txt)   # what cha
 After a merge that changes an adopted piece, re-run `kit-install` into each adopting repository and review its diff
 there.
 
-## Testing the installer
+## Token usage
+
+```bash
+./kit/bin/token-report --repo ~/repos/github.com/PaulSnow/<repo> --by role --since 2026-10-20
+```
+
+[`kit/bin/token-report`](kit/bin/token-report) totals the tokens Claude Code spent on a repository, read from its
+session transcripts under `~/.claude/projects/`, including subagents. Each model reply is counted once. Columns
+separate fresh input, cache writes, cache reads and output (thinking shown as its share of output), because they are
+priced differently. `--by session|role|model` groups the rows; a subagent's role is its agent type, so the cost of
+`code-critic` or `plan-reviewer` shows separately. `--since`/`--until` bound a window and `--json` gives the rows to a
+script. Wolf's execution telemetry records time and review findings but not tokens, and `llm-usage` shows plan usage
+against pace, not the cost of one task; this fills that gap.
+
+## Testing the kit
 
 ```bash
 ./bin/test kit/tests
 ```
 
-The kit's tests live in `kit/tests/`, outside Wolf's governed proof estate, so they add nothing to his ledgers and
+The kit's tests, for `kit-install` and `token-report`, live in `kit/tests/`, outside Wolf's governed proof estate, so they add nothing to his ledgers and
 `./bin/check all` does not run them. Run them after every upstream merge. `kit/tests/references.txt` is the reviewed
 list of references that do not resolve in a fresh target; a merge that adds or drops one fails the test until the
 list is reviewed and updated.
