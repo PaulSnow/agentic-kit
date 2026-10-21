@@ -36,7 +36,8 @@ Installed separately, never vendored:
   separate CLI and never link it into project code.
 - [Quillric](https://github.com/wolfmcnally/quillric) (MIT) turns a recording into a diarized transcript. It is paid
   per hour through ElevenLabs.
-- [llm-usage](https://github.com/wolfmcnally/llm-usage) (MIT) shows Claude plan usage against pace.
+- [llm-usage](https://github.com/wolfmcnally/llm-usage) (MIT) shows Claude plan usage against pace. Clone it and link
+  `llm-usage` onto `PATH`; `subscription-usage` runs it.
 
 ## Installing into a repository
 
@@ -70,10 +71,38 @@ there.
 [`kit/bin/token-report`](kit/bin/token-report) totals the tokens Claude Code spent on a repository, read from its
 session transcripts under `~/.claude/projects/`, including subagents. Each model reply is counted once. Columns
 separate fresh input, cache writes, cache reads and output (thinking shown as its share of output), because they are
-priced differently. `--by session|role|model` groups the rows; a subagent's role is its agent type, so the cost of
-`code-critic` or `plan-reviewer` shows separately. `--since`/`--until` bound a window and `--json` gives the rows to a
+priced differently. `--by session|role|account|model` groups the rows; a subagent's role is its agent type, so the
+cost of `code-critic` or `plan-reviewer` shows separately. Each reply is credited to the subscription logged in when it
+was made: Claude Code records the organization id when a session starts and whenever the login changes. Replies from
+before Claude Code recorded it show as `unknown`. `--since`/`--until` bound a window and `--json` gives the rows to a
 script. Wolf's execution telemetry records time and review findings but not tokens, and `llm-usage` shows plan usage
 against pace, not the cost of one task; this fills that gap.
+
+## Subscription limits
+
+```bash
+./kit/bin/subscription-usage
+```
+
+[`kit/bin/subscription-usage`](kit/bin/subscription-usage) shows each Claude subscription's plan windows (5-hour,
+7-day, per-model) by running `llm-usage` once per subscription. `llm-usage` reads one credential per run and caches per
+provider, not per account, so each run gets that subscription's token and its own cache directory. The subscriptions
+are listed in `~/.config/agentic-kit/subscriptions.json`, which `token-report` also reads to name them. The file says
+where each token is, never the token:
+
+```json
+{"subscriptions": [
+  {"name": "personal", "organization": "<uuid>", "config_dir": "~/.claude"},
+  {"name": "work", "organization": "<uuid>", "token_command": ["secret-tool", "lookup", "service", "claude-work"]}
+]}
+```
+
+A `config_dir` entry reads that Claude Code login, and reports `not-logged-in` without a request when a different
+subscription is logged in there. Two subscriptions that take turns in `~/.claude` can therefore only be read one at a
+time. To read both at once, give the second its own login (`CLAUDE_CONFIG_DIR=~/.claude-work claude`) or a
+long-lived token from `claude setup-token`, kept in the keyring (`token_command`) or a mode-600 file (`token_file`).
+A token from a command or file cannot be matched to an organization, so its entry says `unverified`. Wolf's kickoff
+still checks one Claude account; subscriptions are not routed per role.
 
 ## Testing the kit
 
@@ -81,7 +110,7 @@ against pace, not the cost of one task; this fills that gap.
 ./bin/test kit/tests
 ```
 
-The kit's tests, for `kit-install` and `token-report`, live in `kit/tests/`, outside Wolf's governed proof estate, so they add nothing to his ledgers and
+The kit's tests live in `kit/tests/`, outside Wolf's governed proof estate, so they add nothing to his ledgers and
 `./bin/check all` does not run them. Run them after every upstream merge. `kit/tests/references.txt` is the reviewed
 list of references that do not resolve in a fresh target; a merge that adds or drops one fails the test until the
 list is reviewed and updated.

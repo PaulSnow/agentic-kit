@@ -6,13 +6,21 @@ the current directory), including subagent transcripts, and sums the `usage`
 block of each model reply. A reply is written as several transcript lines that
 repeat the same usage, so each reply is counted once, by message id.
 
+Each reply is credited to the subscription that was logged in when it was made:
+Claude Code writes the organization id into the transcript when a session
+starts and whenever the login changes, and the latest one before the reply
+wins. A reply with no earlier marker is `unknown`. An organization listed in
+the subscriptions file (the one kit/bin/subscription-usage reads) shows by its
+name, otherwise by the first eight characters of its id.
+
 Columns: `input` is fresh input, `cache_write` and `cache_read` are prompt-cache
 input, `output` includes thinking, and `thinking` is the part of output spent
 thinking. Rows are grouped by session, by role (`main` for the session itself,
-otherwise the subagent's type) and by model; `--by` picks the grouping.
+otherwise the subagent's type), by account or by model; `--by` picks the grouping.
 
 Usage: token-report [--repo DIR] [--since T] [--until T] [--session ID]
-                    [--by session|role|model] [--json] [--projects-root DIR]
+                    [--by session|role|account|model] [--json]
+                    [--projects-root DIR] [--subscriptions FILE]
 T is an ISO-8601 date or time, compared in UTC; --until is exclusive.
 Exit: 0 report printed (possibly empty); 2 usage error.
 """
@@ -20,6 +28,7 @@ Exit: 0 report printed (possibly empty); 2 usage error.
 from __future__ import annotations
 
 import argparse
+import bisect
 import json
 import re
 import sys
@@ -28,6 +37,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 FIELDS = ("input", "cache_write", "cache_read", "output", "thinking")
+HEADERS = {
+    "session": ("session", "account", "role", "model"),
+    "role": ("account", "role", "model"),
+    "account": ("account", "model"),
+    "model": ("model",),
+}
 
 
 def parse_time(value: str) -> datetime:
@@ -63,12 +78,39 @@ def transcripts(projects_root: Path, repo: Path) -> list[tuple[Path, str]]:
     return found
 
 
-def replies(path: Path, role: str, repo: Path) -> dict[str, dict]:
+def account_names(path: Path) -> dict[str, str]:
+    if not path.is_file():
+        return {}
+    config = json.loads(path.read_text(encoding="utf-8"))
+    return {
+        entry["organization"]: entry["name"]
+        for entry in config.get("subscriptions", [])
+        if entry.get("organization")
+    }
+
+
+def replies(
+    path: Path, role: str, repo: Path, markers: dict[str, list]
+) -> dict[str, dict]:
+    """Replies inside REPO, by message id; adds login markers to MARKERS by session."""
     seen: dict[str, dict] = {}
     for line in path.read_text(encoding="utf-8").splitlines():
         try:
             record = json.loads(line)
         except json.JSONDecodeError:
+            continue
+        attachment = record.get("attachment")
+        if (
+            isinstance(attachment, dict)
+            and attachment.get("type") == "credential_org"
+            and record.get("timestamp")
+        ):
+            markers[record.get("sessionId", path.stem)].append(
+                (
+                    parse_time(record["timestamp"]),
+                    attachment.get("organizationUuid") or "",
+                )
+            )
             continue
         message = record.get("message")
         if not isinstance(message, dict) or not isinstance(message.get("usage"), dict):
@@ -95,16 +137,32 @@ def replies(path: Path, role: str, repo: Path) -> dict[str, dict]:
     return seen
 
 
+def account_at(reply: dict, markers: dict[str, list], names: dict[str, str]) -> str:
+    timeline = markers.get(reply["session"], [])
+    if reply["time"] is None:
+        return "unknown"
+    index = bisect.bisect_right(timeline, (reply["time"], "\uffff")) - 1
+    if index < 0 or not timeline[index][1]:
+        return "unknown"
+    organization = timeline[index][1]
+    return names.get(organization, organization[:8])
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--repo", type=Path, default=Path.cwd())
     ap.add_argument("--since")
     ap.add_argument("--until")
     ap.add_argument("--session")
-    ap.add_argument("--by", choices=("session", "role", "model"), default="session")
+    ap.add_argument("--by", choices=tuple(HEADERS), default="session")
     ap.add_argument("--json", action="store_true")
     ap.add_argument(
         "--projects-root", type=Path, default=Path.home() / ".claude" / "projects"
+    )
+    ap.add_argument(
+        "--subscriptions",
+        type=Path,
+        default=Path.home() / ".config" / "agentic-kit" / "subscriptions.json",
     )
     a = ap.parse_args()
     try:
@@ -116,8 +174,12 @@ def main() -> int:
     repo = a.repo.resolve()
 
     counted: dict[str, dict] = {}
+    markers: dict[str, list] = defaultdict(list)
     for path, role in transcripts(a.projects_root, repo):
-        counted.update(replies(path, role, repo))
+        counted.update(replies(path, role, repo, markers))
+    for timeline in markers.values():
+        timeline.sort(key=lambda marker: marker[0])
+    names = account_names(a.subscriptions)
 
     groups: dict[tuple, dict] = defaultdict(
         lambda: dict.fromkeys(FIELDS + ("replies",), 0)
@@ -129,20 +191,13 @@ def main() -> int:
             continue
         if since and reply["time"] < since or until and reply["time"] >= until:
             continue
-        key = {
-            "session": (reply["session"], reply["role"], reply["model"]),
-            "role": (reply["role"], reply["model"]),
-            "model": (reply["model"],),
-        }[a.by]
+        reply["account"] = account_at(reply, markers, names)
+        key = tuple(reply[column] for column in HEADERS[a.by])
         for field in FIELDS:
             groups[key][field] += reply[field]
         groups[key]["replies"] += 1
 
-    headers = {
-        "session": ("session", "role", "model"),
-        "role": ("role", "model"),
-        "model": ("model",),
-    }[a.by]
+    headers = HEADERS[a.by]
     rows = [dict(zip(headers, key)) | totals for key, totals in sorted(groups.items())]
     total = {field: sum(row[field] for row in rows) for field in FIELDS + ("replies",)}
     if a.json:

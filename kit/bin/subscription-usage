@@ -1,0 +1,274 @@
+#!/usr/bin/env python3
+"""Show plan usage for each Claude subscription, one llm-usage run per subscription.
+
+Wolf's llm-usage reads one credential and caches its reading per provider, so
+two subscriptions cannot be read in one run, and a second run would be served
+the first one's cached reading. This runs llm-usage once per subscription, with
+that subscription's token in CLAUDE_CODE_OAUTH_TOKEN and its own cache
+directory, and keeps only the Anthropic block.
+
+Subscriptions are listed in a JSON file (default
+~/.config/agentic-kit/subscriptions.json); it names where each token is, never
+the token itself:
+
+    {"subscriptions": [
+      {"name": "personal", "organization": "<uuid>", "config_dir": "~/.claude"},
+      {"name": "work", "organization": "<uuid>",
+       "token_command": ["secret-tool", "lookup", "service", "claude-work"]}
+    ]}
+
+Each entry has exactly one source:
+  config_dir     a Claude Code login: <dir>/.credentials.json, identified by
+                 <dir>/.claude.json, or <dir>.json for the default ~/.claude.
+                 When `organization` is set and another subscription is logged
+                 in there, the entry reports `not-logged-in` without a request;
+                 a login whose access token has expired reports `expired`.
+  token_file     a file holding only the token, readable by its owner alone.
+  token_command  an argv list (no shell) whose stdout is the token.
+A token from a file or command cannot be matched to an organization, so its
+entry says `unverified`.
+
+Usage: subscription-usage [--config FILE] [--only NAME] [--fresh] [--json]
+                          [--llm-usage PROGRAM] [--cache-root DIR]
+Exit: 0 every subscription read; 1 at least one was not; 2 configuration error.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import shutil
+import stat
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+SOURCES = ("config_dir", "token_file", "token_command")
+
+
+class ConfigError(Exception):
+    pass
+
+
+def load_config(path: Path) -> list[dict]:
+    if not path.is_file():
+        raise ConfigError(f"no subscriptions file at {path}")
+    try:
+        entries = json.loads(path.read_text(encoding="utf-8"))["subscriptions"]
+    except (ValueError, KeyError, TypeError) as exc:
+        raise ConfigError(
+            f"{path}: expected an object with a subscriptions list"
+        ) from exc
+    names = set()
+    for entry in entries:
+        name = entry.get("name") if isinstance(entry, dict) else None
+        if not isinstance(name, str) or not name or "/" in name or name in names:
+            raise ConfigError(f"{path}: each subscription needs a distinct name")
+        names.add(name)
+        given = [source for source in SOURCES if source in entry]
+        if len(given) != 1:
+            raise ConfigError(f"{name}: give exactly one of {', '.join(SOURCES)}")
+        command = entry.get("token_command")
+        if "token_command" in entry and (
+            not isinstance(command, list)
+            or not command
+            or not all(isinstance(part, str) for part in command)
+        ):
+            raise ConfigError(f"{name}: token_command must be a list of strings")
+    return entries
+
+
+def login_token(entry: dict) -> tuple[str | None, dict]:
+    """The token of a Claude Code login, or None with the reason in the facts."""
+    directory = Path(entry["config_dir"]).expanduser()
+    identity = directory / ".claude.json"
+    if not identity.is_file():
+        identity = Path(f"{directory}.json")
+    facts: dict = {"source": f"login {directory}"}
+    try:
+        credentials = json.loads((directory / ".credentials.json").read_text())
+        oauth = credentials["claudeAiOauth"]
+    except (OSError, ValueError, KeyError) as exc:
+        facts |= {
+            "state": "error",
+            "error": f"no Claude Code login: {type(exc).__name__}",
+        }
+        return None, facts
+    account = {}
+    if identity.is_file():
+        account = json.loads(identity.read_text()).get("oauthAccount") or {}
+    facts |= {
+        "organization": account.get("organizationUuid"),
+        "plan": oauth.get("subscriptionType"),
+        "expires_at_ms": oauth.get("expiresAt"),
+    }
+    wanted = entry.get("organization")
+    if wanted and facts["organization"] != wanted:
+        logged_in = facts["organization"] or "unknown"
+        facts = {
+            "source": facts["source"],
+            "organization": wanted,
+            "state": "not-logged-in",
+            "error": f"{logged_in[:8]} is logged in there",
+        }
+        return None, facts
+    expires = oauth.get("expiresAt")
+    if isinstance(expires, (int, float)) and expires <= time.time() * 1000:
+        facts["state"] = "expired"
+        facts["error"] = (
+            "access token expired; use Claude Code on this login to refresh it"
+        )
+        return None, facts
+    return oauth.get("accessToken"), facts
+
+
+def file_token(entry: dict) -> tuple[str | None, dict]:
+    path = Path(entry["token_file"]).expanduser()
+    facts: dict = {"source": f"file {path}", "organization": "unverified"}
+    try:
+        mode = path.stat().st_mode
+        if mode & (stat.S_IRWXG | stat.S_IRWXO):
+            facts |= {
+                "state": "error",
+                "error": "token file is readable by others; chmod 600",
+            }
+            return None, facts
+        return path.read_text(encoding="utf-8").strip(), facts
+    except OSError as exc:
+        facts |= {"state": "error", "error": f"cannot read token file: {exc.strerror}"}
+        return None, facts
+
+
+def command_token(entry: dict) -> tuple[str | None, dict]:
+    facts: dict = {
+        "source": f"command {entry['token_command'][0]}",
+        "organization": "unverified",
+    }
+    try:
+        result = subprocess.run(
+            entry["token_command"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        facts |= {
+            "state": "error",
+            "error": f"token command failed: {type(exc).__name__}",
+        }
+        return None, facts
+    if result.returncode != 0 or not result.stdout.strip():
+        facts |= {
+            "state": "error",
+            "error": f"token command exited {result.returncode}",
+        }
+        return None, facts
+    return result.stdout.strip(), facts
+
+
+def read_usage(entry: dict, program: str, cache_root: Path, fresh: bool) -> dict:
+    source = next(source for source in SOURCES if source in entry)
+    token, facts = {
+        "config_dir": login_token,
+        "token_file": file_token,
+        "token_command": command_token,
+    }[source](entry)
+    report = {"name": entry["name"], "state": "ok", "error": None} | facts
+    if token is None:
+        report.setdefault("state", "error")
+        return report
+    env = dict(os.environ)
+    env["CLAUDE_CODE_OAUTH_TOKEN"] = token
+    env["XDG_CACHE_HOME"] = str(cache_root / entry["name"])
+    try:
+        result = subprocess.run(
+            [program, "--json", *(["--fresh"] if fresh else [])],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+            env=env,
+        )
+        block = json.loads(result.stdout)["anthropic"]
+    except (OSError, subprocess.TimeoutExpired, ValueError, KeyError, TypeError) as exc:
+        return report | {
+            "state": "error",
+            "error": f"llm-usage failed: {type(exc).__name__}",
+        }
+    if not isinstance(block, dict) or block.get("ok") is not True:
+        error = block.get("error") if isinstance(block, dict) else None
+        return report | {
+            "state": "error",
+            "error": f"llm-usage: {error or 'no reading'}",
+        }
+    return report | {
+        "plan": report.get("plan") or block.get("subscription"),
+        "anthropic": block,
+    }
+
+
+def describe(seconds: object) -> str:
+    if not isinstance(seconds, (int, float)):
+        return ""
+    hours, minutes = divmod(int(seconds) // 60, 60)
+    days, hours = divmod(hours, 24)
+    return f"resets in {days}d {hours}h" if days else f"resets in {hours}h {minutes}m"
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument(
+        "--config",
+        type=Path,
+        default=Path.home() / ".config" / "agentic-kit" / "subscriptions.json",
+    )
+    ap.add_argument("--only")
+    ap.add_argument("--fresh", action="store_true")
+    ap.add_argument("--json", action="store_true")
+    ap.add_argument("--llm-usage", dest="program", default="llm-usage")
+    ap.add_argument(
+        "--cache-root",
+        type=Path,
+        default=Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache")
+        / "agentic-kit"
+        / "llm-usage",
+    )
+    a = ap.parse_args()
+    try:
+        entries = load_config(a.config)
+        if a.only:
+            entries = [entry for entry in entries if entry["name"] == a.only]
+            if not entries:
+                raise ConfigError(f"no subscription named {a.only}")
+    except ConfigError as exc:
+        print(f"subscription-usage: {exc}", file=sys.stderr)
+        return 2
+    program = shutil.which(a.program)
+    if program is None:
+        print(f"subscription-usage: {a.program} is not installed", file=sys.stderr)
+        return 2
+
+    reports = [read_usage(entry, program, a.cache_root, a.fresh) for entry in entries]
+    if a.json:
+        print(json.dumps({"subscriptions": reports}, indent=2))
+    else:
+        for report in reports:
+            organization = (report.get("organization") or "unknown")[:8]
+            plan = report.get("plan") or "plan unknown"
+            print(f"{report['name']}  ({organization}, {plan}, {report['source']})")
+            if report["state"] != "ok":
+                print(f"  {report['state']}: {report['error']}")
+                continue
+            for window in report["anthropic"].get("windows", {}).values():
+                print(
+                    f"  {window.get('label', '?'):<16} {window.get('utilization', 0):>5.0f}%"
+                    f"  {describe(window.get('reset_seconds'))}"
+                )
+    return 0 if all(report["state"] == "ok" for report in reports) else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

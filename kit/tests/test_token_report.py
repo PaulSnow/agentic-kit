@@ -61,6 +61,8 @@ def run(root: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
             str(root),
             "--repo",
             str(REPO),
+            "--subscriptions",
+            str(root / "no-subscriptions.json"),
             "--json",
             *arguments,
         ],
@@ -110,6 +112,7 @@ def test_attributes_subagents_to_their_role(tmp_path: Path) -> None:
     data = report(tmp_path, "--by", "role")
 
     rows = {(r["role"], r["model"]): r["output"] for r in data["rows"]}
+    assert {r["account"] for r in data["rows"]} == {"unknown"}
     assert rows == {
         ("code-critic", "claude-sonnet-5-5"): 7,
         ("main", "claude-opus-5-5"): 20,
@@ -192,3 +195,43 @@ def test_rejects_malformed_time(tmp_path: Path) -> None:
 
     assert result.returncode == 2
     assert "bad time" in result.stderr
+
+
+def login(organization: str, time: str, session: str = SESSION) -> dict:
+    return {
+        "type": "attachment",
+        "cwd": str(REPO),
+        "sessionId": session,
+        "timestamp": time,
+        "attachment": {"type": "credential_org", "organizationUuid": organization},
+    }
+
+
+def test_credits_each_reply_to_the_subscription_logged_in_then(tmp_path: Path) -> None:
+    personal = "aaaaaaaa-0000-0000-0000-000000000000"
+    work = "bbbbbbbb-1111-1111-1111-111111111111"
+    project = project_dir(tmp_path)
+    write_lines(
+        project / f"{SESSION}.jsonl",
+        [
+            reply("msg_before", time="2026-10-20T09:00:00Z"),
+            login(personal, "2026-10-20T10:00:00Z"),
+            reply("msg_personal", time="2026-10-20T10:00:00Z"),
+            login(work, "2026-10-20T11:00:00Z"),
+            reply("msg_work", time="2026-10-20T11:30:00Z"),
+        ],
+    )
+    write_lines(
+        project / SESSION / "subagents" / "agent-a1.jsonl",
+        [reply("msg_sub", time="2026-10-20T10:30:00Z", tokens=(0, 0, 0, 3, 0))],
+    )
+    names = tmp_path / "subscriptions.json"
+    names.write_text(
+        json.dumps({"subscriptions": [{"name": "work", "organization": work}]}),
+        encoding="utf-8",
+    )
+
+    data = report(tmp_path, "--by", "account", "--subscriptions", str(names))
+
+    rows = {r["account"]: (r["output"], r["replies"]) for r in data["rows"]}
+    assert rows == {"aaaaaaaa": (23, 2), "work": (20, 1), "unknown": (20, 1)}
