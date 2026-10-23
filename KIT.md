@@ -104,6 +104,21 @@ long-lived token from `claude setup-token`, kept in the keyring (`token_command`
 A token from a command or file cannot be matched to an organization, so its entry says `unverified`. Wolf's kickoff
 still checks one Claude account; subscriptions are not routed per role.
 
+## Supervising sessions
+
+[`kit/agentd`](kit/agentd/README.md) is a Go supervisor for unattended Claude Code sessions in tmux: an append-only
+event log, a session state machine driven by evidence (tmux screen, `STATUS.md`, transcript, process), and the
+supervisor's policies as configuration: restart with backoff and a crash-loop breaker, bounded nudging that leaves a
+session blocked on the owner alone, usage-limit waiting, the folder-trust prompt, delivery as a merge or pull request
+through one allow-listed forge client, and escalation posted once per key. `agentd run --shadow` logs what it would
+do without acting; `agentd status` prints the state table from the log. The owner's sessions and repositories live
+outside the repository in `~/.config/agentic-kit/agentd.json`; [`agentd.example.json`](kit/agentd/agentd.example.json)
+shows the shape.
+
+```bash
+cd kit/agentd && go test -race ./...
+```
+
 ## Testing the kit
 
 ```bash
