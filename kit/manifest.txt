@@ -1,10 +1,28 @@
 # The pieces of Wolf's starter we adopt, as repo-relative paths, installed
-# verbatim by kit/bin/kit-install. A directory installs whole. See KIT.md.
+# verbatim by kit/bin/kit-install. A directory installs whole; "empty DIR"
+# creates DIR with only a .gitkeep, for ledgers that start empty. See KIT.md.
+#
+# Where stamp names a bundle as atomic, every member is listed and
+# kit/tests/test_kit_install.py checks it against stamp's own text. The
+# .agents/ Codex mirrors are left out: this kit is Claude-only.
 
-# Saved third-party documents, and the lessons ledger
-policies/docs.md
-policies/lessons.md
+# Rule One bundle (atomic in stamp): the skill and its reasoning brief
 .claude/skills/rule-one
+briefs/rule-one-diagnostic-learning.md
+
+# Self-improvement bundle (atomic in stamp): the lessons ledger, its tools and sweep
+policies/lessons.md
+bin/lessons
+bin/check-catalogs
+tests/test_lessons.py
+tests/test_check_catalogs.py
+.claude/skills/sweep
+briefs/harness-self-improvement.md
+empty lessons/
+empty lessons-archived/
+
+# Saved third-party documents
+policies/docs.md
 
 # Policies we already follow, written down so every session reads them
 policies/verification-discipline.md

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -187,3 +188,59 @@ def test_real_manifest_references_match_reviewed_list(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     lines = [line.strip() for line in result.stdout.splitlines() if " -> " in line]
     assert lines == REFERENCES.read_text(encoding="utf-8").splitlines()
+
+
+def test_empty_entry_creates_ledger_directory_without_contents(tmp_path: Path) -> None:
+    kit = make_kit(tmp_path, MANIFEST + "empty lessons/\n")
+    write(kit / "lessons" / "upstream-entry.md", "the template's own lesson\n")
+    git(kit, "add", ".")
+    git(kit, "commit", "-qm", "ledger")
+    target = init_repo(tmp_path / "target")
+
+    result = run(kit, str(target))
+
+    assert result.returncode == 0, result.stderr
+    assert (target / "lessons" / ".gitkeep").is_file()
+    assert not (target / "lessons" / "upstream-entry.md").exists()
+
+
+STAMP = ROOT / ".claude" / "skills" / "stamp" / "SKILL.md"
+BUNDLE_SENTENCES = {
+    "Rule One": "Rule One is also atomic:",
+    "self-improvement": "So is the self-improvement bundle (",
+}
+
+
+def stamp_bundle(opening: str) -> set[str]:
+    """The paths stamp names in the sentence or paragraph that defines one atomic bundle."""
+    text = STAMP.read_text(encoding="utf-8")
+    start = text.index(opening)
+    end = text.find("\n\n", start)
+    paths = set()
+    for token in re.findall(r"`([^`]+)`", text[start:end]):
+        if "/" in token and not token.startswith(".agents/"):
+            paths.add(token.rstrip("/"))
+    return paths
+
+
+def manifest_entries() -> set[str]:
+    entries = set()
+    for line in (ROOT / "kit" / "manifest.txt").read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if line and not line.startswith("#"):
+            entries.add(line.removeprefix("empty ").rstrip("/"))
+    return entries
+
+
+def covered(path: str, entries: set[str]) -> bool:
+    return any(path == entry or path.startswith(entry + "/") for entry in entries)
+
+
+def test_manifest_installs_stamps_atomic_bundles_whole() -> None:
+    """Wolf's stamp names the bundles that travel together; the manifest carries every member."""
+    entries = manifest_entries()
+    for name, opening in BUNDLE_SENTENCES.items():
+        members = stamp_bundle(opening)
+        assert members, f"stamp no longer defines the {name} bundle"
+        missing = sorted(p for p in members if not covered(p, entries))
+        assert not missing, f"{name} bundle incomplete in kit/manifest.txt: {missing}"

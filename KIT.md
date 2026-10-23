@@ -7,7 +7,8 @@ Paul Snow's fork of Wolf McNally's [Agentic Coding Starter Kit](https://github.c
 | Piece | Why |
 |---|---|
 | [`policies/docs.md`](policies/docs.md) | Third-party documents a project relies on are saved verbatim with their source and date. Drafts expire and pages change, so a decision should be re-readable against what was actually cited |
-| [`policies/lessons.md`](policies/lessons.md) and [`rule-one`](.claude/skills/rule-one/SKILL.md) | Failures and corrections become lessons in a ledger inside the repo, readable by every session, machine and build driver, not only by one machine's Claude memory |
+| **Rule One bundle:** [`rule-one`](.claude/skills/rule-one/SKILL.md) and its brief [`rule-one-diagnostic-learning`](briefs/rule-one-diagnostic-learning.md) | Failures and corrections are diagnosed before they are fixed, and what is learned is kept |
+| **Self-improvement bundle:** [`policies/lessons.md`](policies/lessons.md), `bin/lessons`, `bin/check-catalogs`, their tests, [`sweep`](.claude/skills/sweep/SKILL.md), [`harness-self-improvement`](briefs/harness-self-improvement.md) and empty `lessons/` and `lessons-archived/` ledgers | Lessons live in a ledger inside the repo, readable by every session, machine and build driver, not only by one machine's Claude memory; `sweep` reviews them |
 | [`policies/verification-discipline.md`](policies/verification-discipline.md) | Every review states what it inspected and what it could not see; an empty search is not "none found" |
 | [`policies/mechanistic-vs-intelligence.md`](policies/mechanistic-vs-intelligence.md) | Deterministic scripts for repeatable work, models for judgment |
 | [`policies/simplicity-and-consolidation.md`](policies/simplicity-and-consolidation.md) | Least structure for the uses you can name; one home for each piece of knowledge |
@@ -35,6 +36,8 @@ Installed separately, never vendored:
 ./kit/bin/kit-install --dry-run <target-repo>   # what would be copied, and which references dangle
 ./kit/bin/kit-install <target-repo>
 ```
+
+Wolf's `stamp` names some pieces as atomic bundles that must travel together; the manifest lists every member of the two we adopt, and a test checks them against `stamp`'s own text, so a change upstream fails the kit check until the manifest follows. Ledger folders are created empty, never with the template's own entries. The Codex mirrors under `.agents/` are left out, since this kit is Claude-only. `bin/lessons` and `bin/check-catalogs` run through `uv`.
 
 Files land at the same repo-relative paths. The target's `.kit-version` records the upstream commit they came from. The adopted files refer to parts of the starter that were not adopted, by Markdown link or by a path in prose, and the installer lists those references. The adopting repository rewrites or drops them; it does not pull in the rest of the kit to satisfy them. A target file that already differs is not overwritten without `--force`.
 

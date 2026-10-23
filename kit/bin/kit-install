@@ -2,7 +2,8 @@
 """Install the pieces named in kit/manifest.txt into another repository.
 
 Copies each manifest path verbatim to the same repo-relative path under the
-target, records the upstream commit it came from in the target's
+target, creates each "empty DIR" entry as DIR/.gitkeep (a ledger that starts
+empty, never the template's own entries), records the upstream commit it came from in the target's
 `.kit-version`, and lists the references in the installed files that do not
 resolve in the target: Markdown links, resolved against the file, and paths
 named in prose, resolved against the repository root. A prose path counts only
@@ -32,11 +33,15 @@ LINK = re.compile(r"\]\(([^)#\s]+)")
 TOKEN = re.compile(r"[\w./-]+")
 
 
-def manifest_files() -> list[Path]:
-    files = []
+def manifest_entries() -> tuple[list[Path], list[str]]:
+    """The files to copy, and the directories to create empty."""
+    files, empty = [], []
     for line in MANIFEST.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if not line or line.startswith("#"):
+            continue
+        if line.startswith("empty "):
+            empty.append(line.removeprefix("empty ").strip().rstrip("/"))
             continue
         src = ROOT / line
         if src.is_dir():
@@ -45,7 +50,7 @@ def manifest_files() -> list[Path]:
             files.append(src)
         else:
             sys.exit(f"kit-install: manifest names a missing path: {line}")
-    return files
+    return files, empty
 
 
 def tracked_files() -> set[str]:
@@ -94,7 +99,7 @@ def main() -> int:
         print(f"kit-install: {target} is not a git repository", file=sys.stderr)
         return 2
 
-    files = manifest_files()
+    files, empty = manifest_entries()
     conflicts = []
     for src in files:
         dst = target / src.relative_to(ROOT)
@@ -119,6 +124,13 @@ def main() -> int:
         if src.suffix == ".md":
             dangling += [f"{rel.as_posix()} -> {ref}"
                          for ref in unresolved(src, target, installed, tracked)]
+
+    for directory in empty:
+        keep = target / directory / ".gitkeep"
+        print(f"{'would create' if a.dry_run else 'create'} {directory}/ (empty)")
+        if not a.dry_run and not keep.exists():
+            keep.parent.mkdir(parents=True, exist_ok=True)
+            keep.write_text("", encoding="utf-8")
 
     stamp = f"agentic-kit {upstream_commit()}\n"
     if not a.dry_run:
