@@ -244,3 +244,47 @@ def test_manifest_installs_stamps_atomic_bundles_whole() -> None:
         assert members, f"stamp no longer defines the {name} bundle"
         missing = sorted(p for p in members if not covered(p, entries))
         assert not missing, f"{name} bundle incomplete in kit/manifest.txt: {missing}"
+
+
+def test_refuses_manifest_entries_that_leave_the_tree(tmp_path: Path) -> None:
+    for bad in ("/etc/hostname", "../outside.md", "policies/../../outside.md",
+                "empty ../escaped", "empty /tmp/escaped"):
+        kit = make_kit(tmp_path / bad.replace("/", "_").replace(" ", "_"), MANIFEST + bad + "\n")
+        target = init_repo(kit.parent / "target")
+
+        result = run(kit, str(target))
+
+        assert result.returncode == 1, bad
+        assert "absolute or contains '..'" in result.stderr, bad
+        assert not (target / "policies").exists(), bad
+
+
+def test_refuses_symlinked_destination_or_ancestor(tmp_path: Path) -> None:
+    kit = make_kit(tmp_path, MANIFEST + "empty lessons/\n")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    for link in ("policies", ".claude/skills", "lessons", "policies/kept.md", ".kit-version"):
+        target = init_repo(tmp_path / f"target-{link.replace('/', '_')}")
+        (target / link).parent.mkdir(parents=True, exist_ok=True)
+        (target / link).symlink_to(outside)
+
+        result = run(kit, str(target))
+
+        assert result.returncode == 1, link
+        assert "symlink" in result.stderr, link
+        assert list(outside.iterdir()) == [], link
+        assert not (target / ".kit-version").exists() or link == ".kit-version"
+
+
+def test_copies_a_symlink_as_a_symlink(tmp_path: Path) -> None:
+    kit = make_kit(tmp_path, MANIFEST)
+    (kit / ".claude" / "skills" / "s" / "link.md").symlink_to("SKILL.md")
+    git(kit, "add", ".")
+    git(kit, "commit", "-qm", "link")
+    target = init_repo(tmp_path / "target")
+
+    result = run(kit, str(target))
+
+    assert result.returncode == 0, result.stderr
+    installed = target / ".claude" / "skills" / "s" / "link.md"
+    assert installed.is_symlink() and installed.readlink() == Path("SKILL.md")

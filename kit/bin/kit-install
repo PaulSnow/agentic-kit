@@ -14,6 +14,11 @@ to rewrite or drop them.
 An existing target file with different bytes is never overwritten unless
 --force is given; the refusal names it. --dry-run reports without writing.
 
+Every destination must stay inside TARGET: a manifest entry that is absolute or
+contains ".." is refused, and so is a destination that is itself a symlink or
+sits under a symlinked directory inside TARGET. A source that is a symlink is
+copied as a symlink, never followed.
+
 Usage: kit/bin/kit-install [--dry-run] [--force] TARGET
 Exit: 0 installed (or would install); 1 refused; 2 usage.
 """
@@ -33,6 +38,39 @@ LINK = re.compile(r"\]\(([^)#\s]+)")
 TOKEN = re.compile(r"[\w./-]+")
 
 
+class Refusal(Exception):
+    pass
+
+
+def relative_entry(entry: str) -> str:
+    """A manifest entry, refused when it could name a path outside the tree."""
+    path = Path(entry)
+    if not entry or path.is_absolute() or ".." in path.parts:
+        raise Refusal(f"manifest entry is absolute or contains '..': {entry}")
+    return entry
+
+
+def destination(target: Path, rel: str) -> Path:
+    """TARGET/REL, refused when it or a directory above it inside TARGET is a
+    symlink, or when it resolves outside TARGET."""
+    dst = target / rel
+    current = target
+    for part in Path(rel).parts:
+        current = current / part
+        if current.is_symlink():
+            raise Refusal(f"destination is or lies under a symlink: "
+                          f"{current.relative_to(target).as_posix()}")
+    if not dst.resolve().is_relative_to(target):
+        raise Refusal(f"destination resolves outside the target: {rel}")
+    return dst
+
+
+def same(src: Path, dst: Path) -> bool:
+    if src.is_symlink() or dst.is_symlink():
+        return src.is_symlink() and dst.is_symlink() and src.readlink() == dst.readlink()
+    return dst.read_bytes() == src.read_bytes()
+
+
 def manifest_entries() -> tuple[list[Path], list[str]]:
     """The files to copy, and the directories to create empty."""
     files, empty = [], []
@@ -41,12 +79,12 @@ def manifest_entries() -> tuple[list[Path], list[str]]:
         if not line or line.startswith("#"):
             continue
         if line.startswith("empty "):
-            empty.append(line.removeprefix("empty ").strip().rstrip("/"))
+            empty.append(relative_entry(line.removeprefix("empty ").strip().rstrip("/")))
             continue
-        src = ROOT / line
-        if src.is_dir():
-            files += sorted(p for p in src.rglob("*") if p.is_file())
-        elif src.is_file():
+        src = ROOT / relative_entry(line)
+        if src.is_dir() and not src.is_symlink():
+            files += sorted(p for p in src.rglob("*") if p.is_file() or p.is_symlink())
+        elif src.is_file() or src.is_symlink():
             files.append(src)
         else:
             sys.exit(f"kit-install: manifest names a missing path: {line}")
@@ -99,11 +137,18 @@ def main() -> int:
         print(f"kit-install: {target} is not a git repository", file=sys.stderr)
         return 2
 
-    files, empty = manifest_entries()
+    try:
+        files, empty = manifest_entries()
+        destinations = {src: destination(target, src.relative_to(ROOT).as_posix())
+                        for src in files}
+        keeps = [destination(target, f"{directory}/.gitkeep") for directory in empty]
+        version_file = destination(target, ".kit-version")
+    except Refusal as exc:
+        print(f"kit-install: refusing; {exc}", file=sys.stderr)
+        return 1
     conflicts = []
-    for src in files:
-        dst = target / src.relative_to(ROOT)
-        if dst.exists() and dst.read_bytes() != src.read_bytes():
+    for src, dst in destinations.items():
+        if dst.exists() and not same(src, dst):
             conflicts.append(dst.relative_to(target).as_posix())
     if conflicts and not a.force:
         print("kit-install: refusing; these differ in the target (use --force):", file=sys.stderr)
@@ -116,17 +161,16 @@ def main() -> int:
     dangling = []
     for src in files:
         rel = src.relative_to(ROOT)
-        dst = target / rel
+        dst = destinations[src]
         print(f"{'would install' if a.dry_run else 'install'} {rel.as_posix()}")
         if not a.dry_run:
             dst.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src, dst)
-        if src.suffix == ".md":
+            shutil.copy2(src, dst, follow_symlinks=False)
+        if src.suffix == ".md" and not src.is_symlink():
             dangling += [f"{rel.as_posix()} -> {ref}"
                          for ref in unresolved(src, target, installed, tracked)]
 
-    for directory in empty:
-        keep = target / directory / ".gitkeep"
+    for directory, keep in zip(empty, keeps):
         print(f"{'would create' if a.dry_run else 'create'} {directory}/ (empty)")
         if not a.dry_run and not keep.exists():
             keep.parent.mkdir(parents=True, exist_ok=True)
@@ -134,7 +178,7 @@ def main() -> int:
 
     stamp = f"agentic-kit {upstream_commit()}\n"
     if not a.dry_run:
-        (target / ".kit-version").write_text(stamp, encoding="utf-8")
+        version_file.write_text(stamp, encoding="utf-8")
     print(f"{'would record' if a.dry_run else 'recorded'} .kit-version: {stamp.strip()}")
     dangling = sorted(set(dangling))
     if dangling:
