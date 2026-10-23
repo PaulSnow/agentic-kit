@@ -12,6 +12,10 @@ when it contains "/" or "." and names a file this checkout tracks. Those are the
 parts of the starter that were not adopted; the adopting repo decides whether
 to rewrite or drop them.
 
+After a real install (not --dry-run) it runs the target's `bin/lessons
+validate` and `bin/check-catalogs`, when present, and prints their outcome;
+a failing check does not fail the install.
+
 An existing target file with different bytes is never overwritten unless
 --force is given; the refusal names it. --dry-run reports without writing.
 
@@ -147,6 +151,31 @@ def upstream_commit() -> str:
             "this is its own HEAD, not an upstream commit)")
 
 
+POST_CHECKS = (("bin/lessons", "validate"), ("bin/check-catalogs",))
+
+
+def post_checks(target: Path) -> None:
+    """Run the target's own ledger checks and print their outcome. They report;
+    they never fail the install. check-catalogs expects the starter's CLAUDE.md
+    zone markers and plan/INDEX.md, so a repository without them fails it."""
+    print("\nchecks in the target (reported, not enforced):")
+    for command in POST_CHECKS:
+        name = " ".join(command)
+        if not (target / command[0]).is_file():
+            print(f"  {name}: not present")
+            continue
+        try:
+            result = subprocess.run([str(target / command[0]), *command[1:]], cwd=target,
+                                    capture_output=True, text=True, timeout=300)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            print(f"  {name}: could not run ({type(exc).__name__})")
+            continue
+        outcome = "passed" if result.returncode == 0 else f"failed (exit {result.returncode})"
+        print(f"  {name}: {outcome}")
+        for line in (result.stdout + result.stderr).splitlines()[-20:]:
+            print(f"    {line}")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("target", type=Path)
@@ -206,6 +235,8 @@ def main() -> int:
         print(f"\n{len(dangling)} references do not resolve in the target:")
         for d in dangling:
             print(f"  {d}")
+    if not a.dry_run:
+        post_checks(target)
     return 0
 
 

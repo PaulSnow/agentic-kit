@@ -41,6 +41,8 @@ Wolf's `stamp` names some pieces as atomic bundles that must travel together; th
 
 Files land at the same repo-relative paths. The target's `.kit-version` records the upstream commit they came from: the merge base of this checkout's `HEAD` and `upstream/master`. In a checkout without `upstream/master` it records the checkout's own `HEAD` and says so. The adopted files refer to parts of the starter that were not adopted, by Markdown link or by a path in prose, and the installer lists those references. The adopting repository rewrites or drops them; it does not pull in the rest of the kit to satisfy them. A target file that already differs is not overwritten without `--force`.
 
+After installing (not on `--dry-run`), the installer runs the target's `bin/lessons validate` and `bin/check-catalogs` and prints what they report; neither fails the install. `bin/check-catalogs` expects Wolf's `CLAUDE.md` zone markers and a `plan/INDEX.md`, and checks every Markdown link, so in a repository without those it reports errors. That is a known consequence of installing `stamp`'s self-improvement bundle whole: the checker travels with the bundle even where its catalogs do not exist. Those errors list what the adopting repository has to supply, rewrite or drop.
+
 ## Following upstream
 
 ```bash

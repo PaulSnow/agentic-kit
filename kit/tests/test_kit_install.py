@@ -336,3 +336,37 @@ def test_refuses_uncommitted_changes_to_manifest_paths(tmp_path: Path) -> None:
     assert "policies/kept.md" in result.stderr
     assert "policies/left.md" not in result.stderr
     assert not (target / "policies").exists()
+
+
+def test_runs_the_targets_ledger_checks_after_install_without_failing(tmp_path: Path) -> None:
+    kit = make_kit(tmp_path, MANIFEST)
+    target = init_repo(tmp_path / "target")
+    log = tmp_path / "checks.log"
+    write(target / "bin" / "lessons", f'#!/bin/sh\necho "lessons $*" >> {log}\necho ledger ok\n')
+    write(target / "bin" / "check-catalogs",
+          f'#!/bin/sh\necho "catalogs $*" >> {log}\necho "no zone markers" >&2\nexit 1\n')
+    (target / "bin" / "lessons").chmod(0o755)
+    (target / "bin" / "check-catalogs").chmod(0o755)
+
+    dry = run(kit, "--dry-run", str(target))
+
+    assert dry.returncode == 0, dry.stderr
+    assert not log.exists()
+
+    result = run(kit, str(target))
+
+    assert result.returncode == 0, result.stderr
+    assert log.read_text().splitlines() == ["lessons validate", "catalogs "]
+    assert "bin/lessons validate: passed" in result.stdout
+    assert "bin/check-catalogs: failed (exit 1)" in result.stdout
+    assert "no zone markers" in result.stdout
+
+
+def test_skips_ledger_checks_the_target_does_not_have(tmp_path: Path) -> None:
+    kit = make_kit(tmp_path, MANIFEST)
+    target = init_repo(tmp_path / "target")
+
+    result = run(kit, str(target))
+
+    assert result.returncode == 0, result.stderr
+    assert "bin/lessons validate: not present" in result.stdout
