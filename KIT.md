@@ -119,6 +119,8 @@ shows the shape.
 cd kit/agentd && go test -race ./...
 ```
 
+The same tests run in the repository gate as `test-agentd`, inside `./bin/check test` and `./bin/check all`; the gate fails when the module is present and Go (1.21 or newer) is not on PATH.
+
 ## Testing the kit
 
 ```bash

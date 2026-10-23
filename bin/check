@@ -127,7 +127,33 @@ run_format() {
 }
 
 run_test() {
-  run_gate test "$repo_root/bin/test"
+  run_gate test "$repo_root/bin/test" || return $?
+  run_test_agentd
+}
+
+# The Go supervisor in kit/agentd has its own tests. The gate runs them with
+# the race detector when the module is present and refuses, rather than
+# passing, when it is present and Go is not on PATH.
+run_test_agentd() {
+  local module="$repo_root/kit/agentd"
+  if [[ ! -f "$module/go.mod" ]]; then
+    return 0
+  fi
+  run_gate test-agentd go_test_agentd "$module"
+}
+
+go_test_agentd() {
+  local module="$1"
+  local required
+  required="$(sed -n 's/^go \([0-9.]*\)$/\1/p' "$module/go.mod")"
+  if ! command -v go >/dev/null 2>&1; then
+    echo "CHECK test-agentd ERROR go is not on PATH; kit/agentd needs Go $required or newer (kit/agentd/README.md)" >&2
+    return 1
+  fi
+  (
+    cd "$module"
+    go test -race ./...
+  )
 }
 
 run_vital() {

@@ -94,8 +94,11 @@ The single authoritative entry point for automated repository checks. It
 resolves the repo root from its own location, validates the complete toolchain
 bundle, probes the selected locked environment, then runs the selected named
 mode with the identical runtime selection.
-Its `test` mode delegates to `bin/test`. `all` runs lint, format verification,
-tests, and deterministic policy checks in order. Child failures retain their
+Its `test` mode delegates to `bin/test`, then runs the Go supervisor's tests
+(`go test -race ./...` in `kit/agentd`, gate `test-agentd`) when that module is
+present; a present module with no `go` on PATH fails the gate rather than
+passing it. `all` runs lint, format verification, tests, and deterministic
+policy checks in order. Child failures retain their
 exact status and emit a terminal `CHECK <name> FAIL`; success ends with
 `CHECK ALL PASS`. Every `all` run also captures a complete durable log and
 terminal run metadata under `.kickoff/check-all/`; success stores a receipt
