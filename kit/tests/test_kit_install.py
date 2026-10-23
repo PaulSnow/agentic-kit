@@ -7,6 +7,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 KIT_INSTALL = ROOT / "kit" / "bin" / "kit-install"
 REFERENCES = Path(__file__).with_name("references.txt")
@@ -228,18 +230,37 @@ BUNDLE_SENTENCES = {
     "Rule One": "Rule One is also atomic:",
     "self-improvement": "So is the self-improvement bundle (",
 }
+SENTENCE_BREAK = re.compile(r"(?<=\.)\s+(?=[A-Z])")
 
 
-def stamp_bundle(opening: str) -> set[str]:
-    """The paths stamp names in the sentence or paragraph that defines one atomic bundle."""
-    text = STAMP.read_text(encoding="utf-8")
-    start = text.index(opening)
-    end = text.find("\n\n", start)
+def tracked_paths() -> set[str]:
+    """Every tracked file of this checkout and every directory that holds one."""
     paths = set()
-    for token in re.findall(r"`([^`]+)`", text[start:end]):
-        if "/" in token and not token.startswith(".agents/"):
-            paths.add(token.rstrip("/"))
+    for line in git(ROOT, "ls-files").splitlines():
+        parts = line.split("/")
+        paths.update("/".join(parts[:i]) for i in range(1, len(parts) + 1))
     return paths
+
+
+def named_paths(text: str, tracked: set[str]) -> set[str]:
+    """The backticked tokens in TEXT that name a tracked path, Codex mirrors aside."""
+    paths = set()
+    for token in re.findall(r"`([^`]+)`", text):
+        path = token.rstrip("/")
+        if path in tracked and not path.startswith(".agents/"):
+            paths.add(path)
+    return paths
+
+
+def stamp_bundle(opening: str, tracked: set[str]) -> set[str]:
+    """The paths stamp names from OPENING to the end of its paragraph."""
+    text = STAMP.read_text(encoding="utf-8")
+    start = text.find(opening)
+    if start < 0:
+        pytest.fail(f"stamp's SKILL.md no longer contains {opening!r}; "
+                    "find where it now defines the bundle and update BUNDLE_SENTENCES")
+    end = text.find("\n\n", start)
+    return named_paths(text[start:end if end >= 0 else len(text)], tracked)
 
 
 def manifest_entries() -> set[str]:
@@ -257,12 +278,31 @@ def covered(path: str, entries: set[str]) -> bool:
 
 def test_manifest_installs_stamps_atomic_bundles_whole() -> None:
     """Wolf's stamp names the bundles that travel together; the manifest carries every member."""
-    entries = manifest_entries()
+    entries, tracked = manifest_entries(), tracked_paths()
     for name, opening in BUNDLE_SENTENCES.items():
-        members = stamp_bundle(opening)
-        assert members, f"stamp no longer defines the {name} bundle"
+        members = stamp_bundle(opening, tracked)
+        assert members, f"stamp names no tracked path in the {name} bundle"
         missing = sorted(p for p in members if not covered(p, entries))
         assert not missing, f"{name} bundle incomplete in kit/manifest.txt: {missing}"
+
+
+def test_no_atomic_statement_in_stamp_is_partly_adopted() -> None:
+    """A sentence of a stamp paragraph that says "atomic" and names an adopted
+    path must have every tracked path it names adopted too, so a new member or
+    a new atomic bundle touching the kit fails here until the manifest follows."""
+    entries, tracked = manifest_entries(), tracked_paths()
+    for paragraph in STAMP.read_text(encoding="utf-8").split("\n\n"):
+        if not re.search(r"\batomic", paragraph, re.IGNORECASE):
+            continue
+        for sentence in SENTENCE_BREAK.split(paragraph):
+            paths = named_paths(sentence, tracked)
+            if not any(covered(p, entries) for p in paths):
+                continue
+            missing = sorted(p for p in paths if not covered(p, entries))
+            assert not missing, (
+                f"stamp names these with adopted paths as atomic, but kit/manifest.txt "
+                f"lacks them: {missing}\nin: {sentence[:200]}"
+            )
 
 
 def test_refuses_manifest_entries_that_leave_the_tree(tmp_path: Path) -> None:
