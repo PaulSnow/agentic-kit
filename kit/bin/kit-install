@@ -133,14 +133,18 @@ def unresolved(src: Path, target: Path, installed: set[Path], tracked: set[str])
 
 
 def upstream_commit() -> str:
-    out = subprocess.run(
-        ["git", "-C", str(ROOT), "log", "-1", "--format=%H %cs", "upstream/master"],
-        capture_output=True, text=True,
-    )
-    if out.returncode != 0:
-        out = subprocess.run(["git", "-C", str(ROOT), "log", "-1", "--format=%H %cs"],
-                             capture_output=True, text=True, check=True)
-    return out.stdout.strip()
+    """The upstream commit the installed files came from: where this checkout
+    last merged upstream/master. Without that ref, the checkout's own HEAD,
+    marked as such."""
+    def git(*arguments: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(["git", "-C", str(ROOT), *arguments],
+                              capture_output=True, text=True)
+    base = git("merge-base", "HEAD", "upstream/master")
+    if base.returncode == 0:
+        return git("log", "-1", "--format=%H %cs", base.stdout.strip()).stdout.strip()
+    head = git("log", "-1", "--format=%H %cs").stdout.strip()
+    return (f"{head} (no upstream/master in the kit checkout; "
+            "this is its own HEAD, not an upstream commit)")
 
 
 def main() -> int:

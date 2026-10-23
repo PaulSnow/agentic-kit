@@ -39,7 +39,7 @@ Installed separately, never vendored:
 
 Wolf's `stamp` names some pieces as atomic bundles that must travel together; the manifest lists every member of the two we adopt, and a test checks them against `stamp`'s own text, so a change upstream fails the kit check until the manifest follows. Ledger folders are created empty, never with the template's own entries. The Codex mirrors under `.agents/` are left out, since this kit is Claude-only. `bin/lessons` and `bin/check-catalogs` run through `uv`.
 
-Files land at the same repo-relative paths. The target's `.kit-version` records the upstream commit they came from. The adopted files refer to parts of the starter that were not adopted, by Markdown link or by a path in prose, and the installer lists those references. The adopting repository rewrites or drops them; it does not pull in the rest of the kit to satisfy them. A target file that already differs is not overwritten without `--force`.
+Files land at the same repo-relative paths. The target's `.kit-version` records the upstream commit they came from: the merge base of this checkout's `HEAD` and `upstream/master`. In a checkout without `upstream/master` it records the checkout's own `HEAD` and says so. The adopted files refer to parts of the starter that were not adopted, by Markdown link or by a path in prose, and the installer lists those references. The adopting repository rewrites or drops them; it does not pull in the rest of the kit to satisfy them. A target file that already differs is not overwritten without `--force`.
 
 ## Following upstream
 

@@ -84,9 +84,28 @@ def test_installs_manifest_paths_verbatim_and_records_commit(tmp_path: Path) -> 
         assert (target / rel).read_bytes() == (kit / rel).read_bytes()
     assert not (target / "policies" / "left.md").exists()
     head = git(kit, "log", "-1", "--format=%H %cs").strip()
-    assert (target / ".kit-version").read_text(
-        encoding="utf-8"
-    ) == f"agentic-kit {head}\n"
+    assert (target / ".kit-version").read_text(encoding="utf-8") == (
+        f"agentic-kit {head} (no upstream/master in the kit checkout; "
+        "this is its own HEAD, not an upstream commit)\n"
+    )
+
+
+def test_records_the_upstream_commit_the_files_came_from(tmp_path: Path) -> None:
+    kit = make_kit(tmp_path, MANIFEST)
+    base = git(kit, "rev-parse", "HEAD").strip()
+    newer = git(kit, "commit-tree", "-p", base, "-m", "upstream moved on",
+                f"{base}^{{tree}}").strip()
+    git(kit, "update-ref", "refs/remotes/upstream/master", newer)
+    write(kit / "KIT.md", "fork-only change\n")
+    git(kit, "add", "KIT.md")
+    git(kit, "commit", "-qm", "fork")
+    target = init_repo(tmp_path / "target")
+
+    result = run(kit, str(target))
+
+    assert result.returncode == 0, result.stderr
+    stamp = git(kit, "log", "-1", "--format=%H %cs", base).strip()
+    assert (target / ".kit-version").read_text(encoding="utf-8") == f"agentic-kit {stamp}\n"
 
 
 def test_reports_unresolved_links_and_prose_paths(tmp_path: Path) -> None:
