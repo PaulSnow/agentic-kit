@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# The fork's own gate: the kit's tests, which Wolf's ./bin/check all does not
+# run. Run it after ./bin/check all and after every upstream merge.
+set -euo pipefail
+root="$(cd "$(dirname "$0")/../.." && pwd)"
+"$root/bin/test" "$root/kit/tests"
+echo "KIT CHECK PASS"

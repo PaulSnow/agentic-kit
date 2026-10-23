@@ -1,4 +1,4 @@
-"""Behavioral tests for bin/kit-install (fork-specific; see KIT.md)."""
+"""Behavioral tests for kit/bin/kit-install (fork-specific; see KIT.md)."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-KIT_INSTALL = ROOT / "bin" / "kit-install"
+KIT_INSTALL = ROOT / "kit" / "bin" / "kit-install"
 REFERENCES = Path(__file__).with_name("references.txt")
 
 
@@ -36,8 +36,8 @@ def write(path: Path, text: str) -> None:
 def make_kit(tmp_path: Path, manifest: str) -> Path:
     """Build a committed fake kit checkout whose ROOT is its own directory."""
     kit = init_repo(tmp_path / "kit")
-    (kit / "bin").mkdir()
-    shutil.copy2(KIT_INSTALL, kit / "bin" / "kit-install")
+    (kit / "kit" / "bin").mkdir(parents=True)
+    shutil.copy2(KIT_INSTALL, kit / "kit" / "bin" / "kit-install")
     write(kit / "kit" / "manifest.txt", manifest)
     write(
         kit / "policies" / "adopted.md",
@@ -59,7 +59,7 @@ MANIFEST = "# comment\n\npolicies/adopted.md\npolicies/kept.md\n.claude/skills/s
 
 def run(kit_root: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [str(kit_root / "bin" / "kit-install"), *arguments],
+        [str(kit_root / "kit" / "bin" / "kit-install"), *arguments],
         capture_output=True,
         text=True,
         timeout=120,

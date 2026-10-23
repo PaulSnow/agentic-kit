@@ -1,5 +1,5 @@
 # The pieces of Wolf's starter we adopt, as repo-relative paths, installed
-# verbatim by bin/kit-install. A directory installs whole. See KIT.md.
+# verbatim by kit/bin/kit-install. A directory installs whole. See KIT.md.
 
 # Saved third-party documents, and the lessons ledger
 policies/docs.md

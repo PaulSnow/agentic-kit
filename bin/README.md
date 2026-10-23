@@ -14,10 +14,6 @@
 
 ## Scripts
 
-### `kit-install` — install the adopted pieces into another repository
-
-`./bin/kit-install [--dry-run] [--force] TARGET` copies every path in `kit/manifest.txt` verbatim to the same repo-relative path under `TARGET`, records the upstream commit in `TARGET/.kit-version`, and lists references in the installed files (Markdown links and tracked paths named in prose) that do not resolve in the target. A target file with different bytes is refused unless `--force`. Exits 0 on install, 1 on refusal, 2 on usage. Fork-specific; see [KIT.md](../KIT.md).
-
 ### `docs` — build, review and publish the curated manual
 
 `./bin/docs setup` uses exact installed mdBook/admonish versions or installs locked tools under `.kickoff/docs-tools`; the compiler pin is explicit and global tools are unchanged. `./bin/docs` builds and opens the local book. `build` and `check` validate curated sources, generated links/anchors/assets and search/print. `serve` opens a foreground loopback preview; `--url` accepts an existing approved Tailnet proxy URL and creates no route. `deploy` requires the clean latest pushed configured release branch and an already approved Pages workflow; `deploy continuous on|off` changes the explicit push switch without removing manual deployment. `verify` probes the live site and private-path exclusions. A refusal exits nonzero; dispatch does not claim deployment completion or live/browser verification. See [software documentation](../policies/software-documentation.md) and [the manual](../manual/src/documentation.md).
@@ -94,11 +90,8 @@ The single authoritative entry point for automated repository checks. It
 resolves the repo root from its own location, validates the complete toolchain
 bundle, probes the selected locked environment, then runs the selected named
 mode with the identical runtime selection.
-Its `test` mode delegates to `bin/test`, then runs the Go supervisor's tests
-(`go test -race ./...` in `kit/agentd`, gate `test-agentd`) when that module is
-present; a present module with no `go` on PATH fails the gate rather than
-passing it. `all` runs lint, format verification, tests, and deterministic
-policy checks in order. Child failures retain their
+Its `test` mode delegates to `bin/test`. `all` runs lint, format verification,
+tests, and deterministic policy checks in order. Child failures retain their
 exact status and emit a terminal `CHECK <name> FAIL`; success ends with
 `CHECK ALL PASS`. Every `all` run also captures a complete durable log and
 terminal run metadata under `.kickoff/check-all/`; success stores a receipt

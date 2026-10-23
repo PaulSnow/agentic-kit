@@ -13,7 +13,7 @@ to rewrite or drop them.
 An existing target file with different bytes is never overwritten unless
 --force is given; the refusal names it. --dry-run reports without writing.
 
-Usage: bin/kit-install [--dry-run] [--force] TARGET
+Usage: kit/bin/kit-install [--dry-run] [--force] TARGET
 Exit: 0 installed (or would install); 1 refused; 2 usage.
 """
 
@@ -26,7 +26,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = ROOT / "kit" / "manifest.txt"
 LINK = re.compile(r"\]\(([^)#\s]+)")
 TOKEN = re.compile(r"[\w./-]+")

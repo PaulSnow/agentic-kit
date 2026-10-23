@@ -892,23 +892,6 @@ families:
   tier: full
   flake_rate: 0.0
   replacement_lineage: []
-- id: gate-test-agentd
-  kind: gate
-  selectors:
-  - test-agentd
-  source_paths:
-  - bin/check
-  covers:
-  - bin/check
-  - kit/agentd
-  contract: The Go supervisor's tests run with the race detector inside the authoritative test gate whenever the module is present, and a present module with no Go toolchain fails the gate instead of passing it.
-  risk_class: core-success
-  oracle: The named gate command remains present, runs go test -race in kit/agentd, and fails the lifecycle step when a Go test fails or Go is missing.
-  admission: Retained as direct lifecycle wiring for a second-language module the Python test runner cannot reach.
-  nearest_overlap: The test gate runs the Python estate only; no other proof executes the Go tests or notices a missing Go toolchain.
-  tier: full
-  flake_rate: 0.0
-  replacement_lineage: []
 - id: gate-vital
   kind: gate
   selectors:
