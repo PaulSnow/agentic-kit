@@ -288,3 +288,32 @@ def test_copies_a_symlink_as_a_symlink(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     installed = target / ".claude" / "skills" / "s" / "link.md"
     assert installed.is_symlink() and installed.readlink() == Path("SKILL.md")
+
+
+def test_installs_only_tracked_files_of_a_directory(tmp_path: Path) -> None:
+    kit = make_kit(tmp_path, MANIFEST)
+    write(kit / ".claude" / "skills" / "s" / "scratch.md", "untracked\n")
+    target = init_repo(tmp_path / "target")
+
+    result = run(kit, str(target))
+
+    assert result.returncode == 0, result.stderr
+    assert (target / ".claude" / "skills" / "s" / "SKILL.md").is_file()
+    assert not (target / ".claude" / "skills" / "s" / "scratch.md").exists()
+
+
+def test_refuses_uncommitted_changes_to_manifest_paths(tmp_path: Path) -> None:
+    kit = make_kit(tmp_path, MANIFEST)
+    write(kit / ".claude" / "skills" / "s" / "SKILL.md", "edited\n")
+    write(kit / "policies" / "kept.md", "staged\n")
+    git(kit, "add", "policies/kept.md")
+    write(kit / "policies" / "left.md", "not in the manifest\n")
+    target = init_repo(tmp_path / "target")
+
+    result = run(kit, str(target))
+
+    assert result.returncode == 1
+    assert ".claude/skills/s/SKILL.md" in result.stderr
+    assert "policies/kept.md" in result.stderr
+    assert "policies/left.md" not in result.stderr
+    assert not (target / "policies").exists()
