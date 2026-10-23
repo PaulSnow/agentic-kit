@@ -18,8 +18,13 @@ input, `output` includes thinking, and `thinking` is the part of output spent
 thinking. Rows are grouped by session, by role (`main` for the session itself,
 otherwise the subagent's type), by account or by model; `--by` picks the grouping.
 
+--include-worktrees also counts sessions run under REPO-wt/, the sibling
+directory that holds the repository's git worktrees. A subagent whose
+.meta.json cannot be read is counted as `subagent`, with a warning on stderr.
+
 Usage: token-report [--repo DIR] [--since T] [--until T] [--session ID]
                     [--by session|role|account|model] [--json]
+                    [--include-worktrees]
                     [--projects-root DIR] [--subscriptions FILE]
 T is an ISO-8601 date or time, compared in UTC; --until is exclusive.
 Exit: 0 report printed (possibly empty); 2 usage error.
@@ -50,11 +55,28 @@ def parse_time(value: str) -> datetime:
     return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
 
 
-def within(path: str | None, repo: Path) -> bool:
+def within(path: str | None, repo: Path, worktrees: Path | None) -> bool:
+    """Whether a session's cwd is REPO or below it, or below WORKTREES when given."""
     if not path:
         return False
     cwd = Path(path)
-    return cwd == repo or repo in cwd.parents
+    return cwd == repo or repo in cwd.parents or (
+        worktrees is not None and worktrees in cwd.parents
+    )
+
+
+def subagent_role(meta: Path) -> str:
+    """The subagent's type from its .meta.json; `subagent` when absent or corrupt."""
+    if not meta.is_file():
+        return "subagent"
+    try:
+        data = json.loads(meta.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError("not a JSON object")
+    except (OSError, ValueError) as exc:
+        print(f"token-report: skipping unreadable {meta}: {exc}", file=sys.stderr)
+        return "subagent"
+    return data.get("agentType") or "subagent"
 
 
 def transcripts(projects_root: Path, repo: Path) -> list[tuple[Path, str]]:
@@ -67,14 +89,7 @@ def transcripts(projects_root: Path, repo: Path) -> list[tuple[Path, str]]:
         for path in sorted(project.glob("*.jsonl")):
             found.append((path, "main"))
         for path in sorted(project.glob("*/subagents/*.jsonl")):
-            meta = path.with_suffix(".meta.json")
-            role = "subagent"
-            if meta.is_file():
-                role = (
-                    json.loads(meta.read_text(encoding="utf-8")).get("agentType")
-                    or role
-                )
-            found.append((path, role))
+            found.append((path, subagent_role(path.with_suffix(".meta.json"))))
     return found
 
 
@@ -90,7 +105,7 @@ def account_names(path: Path) -> dict[str, str]:
 
 
 def replies(
-    path: Path, role: str, repo: Path, markers: dict[str, list]
+    path: Path, role: str, repo: Path, worktrees: Path | None, markers: dict[str, list]
 ) -> dict[str, dict]:
     """Replies inside REPO, by message id; adds login markers to MARKERS by session."""
     seen: dict[str, dict] = {}
@@ -115,7 +130,10 @@ def replies(
         message = record.get("message")
         if not isinstance(message, dict) or not isinstance(message.get("usage"), dict):
             continue
-        if not within(record.get("cwd"), repo) or message.get("model") == "<synthetic>":
+        if (
+            not within(record.get("cwd"), repo, worktrees)
+            or message.get("model") == "<synthetic>"
+        ):
             continue
         key = message.get("id") or record.get("requestId") or record.get("uuid")
         usage = message["usage"]
@@ -156,6 +174,7 @@ def main() -> int:
     ap.add_argument("--session")
     ap.add_argument("--by", choices=tuple(HEADERS), default="session")
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--include-worktrees", action="store_true")
     ap.add_argument(
         "--projects-root", type=Path, default=Path.home() / ".claude" / "projects"
     )
@@ -172,11 +191,12 @@ def main() -> int:
         print(f"token-report: bad time: {exc}", file=sys.stderr)
         return 2
     repo = a.repo.resolve()
+    worktrees = repo.parent / f"{repo.name}-wt" if a.include_worktrees else None
 
     counted: dict[str, dict] = {}
     markers: dict[str, list] = defaultdict(list)
     for path, role in transcripts(a.projects_root, repo):
-        counted.update(replies(path, role, repo, markers))
+        counted.update(replies(path, role, repo, worktrees, markers))
     for timeline in markers.values():
         timeline.sort(key=lambda marker: marker[0])
     names = account_names(a.subscriptions)

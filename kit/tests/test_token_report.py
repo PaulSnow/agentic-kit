@@ -235,3 +235,41 @@ def test_credits_each_reply_to_the_subscription_logged_in_then(tmp_path: Path) -
 
     rows = {r["account"]: (r["output"], r["replies"]) for r in data["rows"]}
     assert rows == {"aaaaaaaa": (23, 2), "work": (20, 1), "unknown": (20, 1)}
+
+
+def test_corrupt_subagent_meta_warns_and_still_counts(tmp_path: Path) -> None:
+    project = project_dir(tmp_path)
+    agent = project / SESSION / "subagents" / "agent-a1.jsonl"
+    write_lines(agent, [reply("msg_sub")])
+    agent.with_suffix(".meta.json").write_text("{truncated", encoding="utf-8")
+    other = project / SESSION / "subagents" / "agent-a2.jsonl"
+    write_lines(other, [reply("msg_list")])
+    other.with_suffix(".meta.json").write_text("[1]", encoding="utf-8")
+
+    result = run(tmp_path, "--by", "role")
+
+    assert result.returncode == 0, result.stderr
+    assert "agent-a1.meta.json" in result.stderr
+    assert "agent-a2.meta.json" in result.stderr
+    rows = json.loads(result.stdout)["rows"]
+    assert [(r["role"], r["replies"]) for r in rows] == [("subagent", 2)]
+
+
+def test_include_worktrees_adds_sessions_under_the_sibling_wt_directory(
+    tmp_path: Path,
+) -> None:
+    worktree = Path("/work/repo-wt/feature")
+    write_lines(project_dir(tmp_path) / f"{SESSION}.jsonl", [reply("msg_main")])
+    write_lines(
+        project_dir(tmp_path, worktree) / "w.jsonl", [reply("msg_wt", cwd=worktree)]
+    )
+    write_lines(
+        project_dir(tmp_path, Path("/work/repo-wt")) / "r.jsonl",
+        [reply("msg_wt_root", cwd=Path("/work/repo-wt"))],
+    )
+
+    default = report(tmp_path)
+    included = report(tmp_path, "--include-worktrees")
+
+    assert default["total"]["replies"] == 1
+    assert included["total"]["replies"] == 2
