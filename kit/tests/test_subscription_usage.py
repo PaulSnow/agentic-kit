@@ -69,6 +69,13 @@ def run(
 ) -> subprocess.CompletedProcess[str]:
     config = tmp_path / "subscriptions.json"
     config.write_text(json.dumps({"subscriptions": subscriptions}), encoding="utf-8")
+    config.chmod(0o600)
+    return invoke(tmp_path, config, *arguments)
+
+
+def invoke(
+    tmp_path: Path, config: Path, *arguments: str
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [
             str(SUBSCRIPTION_USAGE),
@@ -222,4 +229,52 @@ def test_rejects_bad_configuration(tmp_path: Path) -> None:
     assert two_sources.returncode == 2
     assert "exactly one of" in two_sources.stderr
     assert unknown.returncode == 2
+    assert calls(tmp_path) == []
+
+
+def test_refuses_config_writable_by_others(tmp_path: Path) -> None:
+    config = tmp_path / "subscriptions.json"
+    config.write_text(
+        json.dumps({"subscriptions": [{"name": "x", "token_command": ["echo", "t"]}]}),
+        encoding="utf-8",
+    )
+    for mode in (0o620, 0o602):
+        config.chmod(mode)
+
+        result = invoke(tmp_path, config)
+
+        assert result.returncode == 2
+        assert "writable by others" in result.stderr
+    assert calls(tmp_path) == []
+
+
+def test_rejects_subscription_names_outside_the_safe_set(tmp_path: Path) -> None:
+    for name in ("../up", "a b", ".", "", "ok/no"):
+        result = run(tmp_path, [{"name": name, "token_command": ["echo", "t"]}])
+
+        assert result.returncode == 2, name
+        assert "A-Za-z0-9_-" in result.stderr, name
+    assert calls(tmp_path) == []
+
+
+def test_malformed_identity_file_reports_unreadable(tmp_path: Path) -> None:
+    login = make_login(tmp_path / "claude", ORG_A, "token-a")
+    (login / ".claude.json").write_text("{not json", encoding="utf-8")
+    other = make_login(tmp_path / "claude-list", ORG_A, "token-b")
+    (other / ".claude.json").write_text("[]", encoding="utf-8")
+
+    result = run(
+        tmp_path,
+        [
+            {"name": "a", "organization": ORG_A, "config_dir": str(login)},
+            {"name": "b", "config_dir": str(other)},
+        ],
+        "--json",
+    )
+
+    assert result.returncode == 1
+    reports = by_name(result)
+    assert reports["a"]["state"] == "unreadable"
+    assert ".claude.json" in reports["a"]["error"]
+    assert reports["b"]["state"] == "unreadable"
     assert calls(tmp_path) == []

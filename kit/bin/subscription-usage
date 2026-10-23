@@ -17,6 +17,10 @@ the token itself:
        "token_command": ["secret-tool", "lookup", "service", "claude-work"]}
     ]}
 
+The file can name a command to run, so it is refused unless you own it and
+no one else can write it. Names match [A-Za-z0-9_-]+ (each is also a cache
+directory name).
+
 Each entry has exactly one source:
   config_dir     a Claude Code login: <dir>/.credentials.json, identified by
                  <dir>/.claude.json, or <dir>.json for the default ~/.claude.
@@ -38,6 +42,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -46,6 +51,7 @@ import time
 from pathlib import Path
 
 SOURCES = ("config_dir", "token_file", "token_command")
+NAME = re.compile(r"[A-Za-z0-9_-]+")
 
 
 class ConfigError(Exception):
@@ -55,6 +61,12 @@ class ConfigError(Exception):
 def load_config(path: Path) -> list[dict]:
     if not path.is_file():
         raise ConfigError(f"no subscriptions file at {path}")
+    # The file can name a command to run, so only its owner may change it.
+    info = path.stat()
+    if info.st_uid != os.getuid():
+        raise ConfigError(f"{path} is not owned by you; it can run token_command")
+    if info.st_mode & (stat.S_IWGRP | stat.S_IWOTH):
+        raise ConfigError(f"{path} is writable by others; chmod go-w")
     try:
         entries = json.loads(path.read_text(encoding="utf-8"))["subscriptions"]
     except (ValueError, KeyError, TypeError) as exc:
@@ -64,7 +76,11 @@ def load_config(path: Path) -> list[dict]:
     names = set()
     for entry in entries:
         name = entry.get("name") if isinstance(entry, dict) else None
-        if not isinstance(name, str) or not name or "/" in name or name in names:
+        if not isinstance(name, str) or not NAME.fullmatch(name):
+            raise ConfigError(
+                f"{path}: subscription name {name!r} must match [A-Za-z0-9_-]+"
+            )
+        if name in names:
             raise ConfigError(f"{path}: each subscription needs a distinct name")
         names.add(name)
         given = [source for source in SOURCES if source in entry]
@@ -90,7 +106,9 @@ def login_token(entry: dict) -> tuple[str | None, dict]:
     try:
         credentials = json.loads((directory / ".credentials.json").read_text())
         oauth = credentials["claudeAiOauth"]
-    except (OSError, ValueError, KeyError) as exc:
+        if not isinstance(oauth, dict):
+            raise TypeError
+    except (OSError, ValueError, KeyError, TypeError) as exc:
         facts |= {
             "state": "error",
             "error": f"no Claude Code login: {type(exc).__name__}",
@@ -98,7 +116,16 @@ def login_token(entry: dict) -> tuple[str | None, dict]:
         return None, facts
     account = {}
     if identity.is_file():
-        account = json.loads(identity.read_text()).get("oauthAccount") or {}
+        try:
+            account = json.loads(identity.read_text()).get("oauthAccount") or {}
+            if not isinstance(account, dict):
+                raise TypeError
+        except (OSError, ValueError, AttributeError, TypeError) as exc:
+            facts |= {
+                "state": "unreadable",
+                "error": f"{identity} is unreadable: {type(exc).__name__}",
+            }
+            return None, facts
     facts |= {
         "organization": account.get("organizationUuid"),
         "plan": oauth.get("subscriptionType"),

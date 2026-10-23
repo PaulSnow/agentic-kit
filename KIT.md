@@ -66,7 +66,7 @@ After a merge that changes an adopted piece, re-run `kit-install` into each adop
 ./kit/bin/subscription-usage
 ```
 
-[`kit/bin/subscription-usage`](kit/bin/subscription-usage) shows each Claude subscription's plan windows (5-hour, 7-day, per-model) by running `llm-usage` once per subscription. `llm-usage` reads one credential per run and caches per provider, not per account, so each run gets that subscription's token and its own cache directory. The subscriptions are listed in `~/.config/agentic-kit/subscriptions.json`, which `token-report` also reads to name them. The file says where each token is, never the token:
+[`kit/bin/subscription-usage`](kit/bin/subscription-usage) shows each Claude subscription's plan windows (5-hour, 7-day, per-model) by running `llm-usage` once per subscription. `llm-usage` reads one credential per run and caches per provider, not per account, so each run gets that subscription's token and its own cache directory. The subscriptions are listed in `~/.config/agentic-kit/subscriptions.json`, which `token-report` also reads to name them. The file says where each token is, never the token. Because it can name a command to run, `subscription-usage` refuses it unless you own it and no one else can write it, and each name must match `[A-Za-z0-9_-]+`:
 
 ```json
 {"subscriptions": [
@@ -75,7 +75,7 @@ After a merge that changes an adopted piece, re-run `kit-install` into each adop
 ]}
 ```
 
-A `config_dir` entry reads that Claude Code login, and reports `not-logged-in` without a request when a different subscription is logged in there. Two subscriptions that take turns in `~/.claude` can therefore only be read one at a time. To read both at once, give the second its own login (`CLAUDE_CONFIG_DIR=~/.claude-work claude`) or a long-lived token from `claude setup-token`, kept in the keyring (`token_command`) or a mode-600 file (`token_file`). A token from a command or file cannot be matched to an organization, so its entry says `unverified`. Wolf's kickoff still checks one Claude account; subscriptions are not routed per role.
+A `config_dir` entry reads that Claude Code login, and reports `not-logged-in` without a request when a different subscription is logged in there. Two subscriptions that take turns in `~/.claude` can therefore only be read one at a time. To read both at once, give the second its own login (`CLAUDE_CONFIG_DIR=~/.claude-work claude`) or a long-lived token from `claude setup-token`, kept in the keyring (`token_command`) or a mode-600 file (`token_file`). A token from a command or file cannot be matched to an organization, so its entry says `unverified`. A login whose `.claude.json` cannot be parsed is reported as `unreadable` and the other subscriptions are still read. Wolf's kickoff still checks one Claude account; subscriptions are not routed per role.
 
 ## Supervising sessions
 
